@@ -1,14 +1,24 @@
 # Discord Maestro Bot
 
-A Discord bot that bridges your Discord server with [Maestro](https://maestro.sh) AI agents via the `maestro-cli`.
+[![Made with Maestro](https://raw.githubusercontent.com/RunMaestro/Maestro/main/docs/assets/made-with-maestro.svg)](https://github.com/RunMaestro/Maestro)
+
+A Discord bot that connects your server to [Maestro](https://maestro.sh) AI agents through `maestro-cli`.
+
+## What it does
+
+- Creates dedicated agent channels in Discord
+- Forwards messages to Maestro agents and posts responses back
+- Queues messages per-channel for orderly processing
 
 ## Prerequisites
 
-- Node.js 18+ (use nvm if preferred)
-- [Maestro](https://maestro.sh) installed with `maestro-cli` available on PATH
-- A Discord application and bot token (see Discord Developer docs)
+- Node.js 18+
+- A Discord application + bot token
+- Maestro CLI installed and authenticated
 
-## Setup
+CLI docs: https://docs.runmaestro.ai/
+
+## Quick start
 
 1. Install dependencies:
 
@@ -16,7 +26,13 @@ A Discord bot that bridges your Discord server with [Maestro](https://maestro.sh
 npm install
 ```
 
-2. Copy `.env.example` to `.env` and fill in your values:
+2. Configure environment:
+
+```bash
+cp .env.example .env
+```
+
+Set these values in `.env`:
 
 ```
 DISCORD_BOT_TOKEN=   # Bot token from Discord Developer Portal
@@ -24,19 +40,26 @@ DISCORD_CLIENT_ID=   # Application ID from Discord Developer Portal
 DISCORD_GUILD_ID=    # Your server's ID (right-click server → Copy ID)
 ```
 
-3. Deploy slash commands to your server:
+3. Deploy slash commands:
 
 ```bash
 npm run deploy-commands
 ```
 
-4. Start the bot:
+4. Start the bot (dev mode):
 
 ```bash
 npm run dev
 ```
 
-## Commands
+## Production run
+
+```bash
+npm run build
+npm start
+```
+
+## Slash commands
 
 | Command | Description |
 |---|---|
@@ -45,12 +68,17 @@ npm run dev
 | `/agents new <agent-id>` | Create a dedicated channel for an agent |
 | `/agents disconnect` | (Run inside an agent channel) Remove and delete the channel |
 
-Once an agent channel is created, type messages in it — they are relayed to the agent and the response is posted back. Messages are queued per-channel and processed one at a time. A ⏳ reaction indicates a message is waiting in the queue.
+Once an agent channel is created, type messages in it. Messages are relayed to the agent and the response is posted back. A ⏳ reaction indicates a message is waiting in the queue.
 
-## Bot Permissions Required
+## Discord bot permissions
 
 - Read Messages / View Channels
 - Send Messages
-- Manage Channels (to create/delete agent channels)
+- Manage Channels
 - Add Reactions
 - Read Message History
+
+## Troubleshooting
+
+- If `/health` fails, ensure `maestro-cli` is on your PATH and you are logged in.
+- If commands don’t appear, re-run `npm run deploy-commands` after updating your bot or application settings.
