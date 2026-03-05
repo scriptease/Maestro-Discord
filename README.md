@@ -2,13 +2,13 @@
 
 [![Made with Maestro](https://raw.githubusercontent.com/RunMaestro/Maestro/main/docs/assets/made-with-maestro.svg)](https://github.com/RunMaestro/Maestro)
 
-A Discord bot that connects your server to [Maestro](https://maestro.sh) AI agents through `maestro-cli`.
+A Discord bot that connects your server to Maestro AI agents through `maestro-cli`.
 
-## What it does
+## Features
 
-- Creates dedicated agent channels in Discord
-- Forwards messages to Maestro agents and posts responses back
-- Queues messages per-channel for orderly processing
+- Creates dedicated Discord channels for Maestro agents
+- Queues messages per channel for orderly processing
+- Streams agent replies back into Discord, including usage stats
 
 ## Prerequisites
 
@@ -59,6 +59,12 @@ npm run build
 npm start
 ```
 
+## Tests
+
+```bash
+npm test
+```
+
 ## Slash commands
 
 | Command | Description |
@@ -67,9 +73,19 @@ npm start
 | `/agents list` | Show all available agents |
 | `/agents new <agent-id>` | Create a dedicated channel for an agent |
 | `/agents disconnect` | (Run inside an agent channel) Remove and delete the channel |
-| `/session` | Show session info for the current agent channel |
 
-When an agent channel is created, it spins up a dedicated thread for that agent. Type messages inside the thread. Messages are relayed to the agent and the response is posted back. A ⏳ reaction indicates a message is waiting in the queue.
+## How it works
+
+- `/agents list` reads running agents from Maestro.
+- `/agents new` creates a text channel under the **Maestro Agents** category.
+- Messages in agent channels are queued and forwarded to `maestro-cli`.
+- The bot adds a ⏳ reaction while waiting, shows typing, and splits long replies.
+- After each response, it posts a small usage footer with tokens, cost, and context.
+
+## Data storage
+
+The bot stores channel ↔ agent mappings in a local SQLite database at `maestro-bot.db`.
+Delete this file to reset all channel bindings.
 
 ## Discord bot permissions
 
@@ -81,7 +97,8 @@ When an agent channel is created, it spins up a dedicated thread for that agent.
 
 ## Security note
 
-Only invite this bot to private servers you trust. There is currently no security mechanism to restrict access to agent channels.
+Only invite this bot to private servers you trust. There is currently no access control
+beyond Discord permissions.
 
 ## Troubleshooting
 
