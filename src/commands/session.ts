@@ -52,17 +52,12 @@ async function validateAgentChannel(interaction: ChatInputCommandInteraction) {
 }
 
 async function handleNew(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: false });
-
-  const channelInfo = channelDb.get(interaction.channelId);
-  if (interaction.channel?.isThread()) {
-    await interaction.editReply('❌ Run this command in the main agent channel, not inside a thread.');
-    return;
-  }
+  const channelInfo = await validateAgentChannel(interaction);
   if (!channelInfo) {
-    await interaction.editReply('❌ This channel is not connected to an agent. Use `/agents connect` first.');
     return;
   }
+
+  await interaction.deferReply({ ephemeral: false });
 
   const providedName = interaction.options.getString('name');
   const threadName =
@@ -87,17 +82,12 @@ async function handleNew(interaction: ChatInputCommandInteraction): Promise<void
 }
 
 async function handleList(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
-
-  if (interaction.channel?.isThread()) {
-    await interaction.editReply('❌ Run this command in the main agent channel, not inside a thread.');
-    return;
-  }
-  const channelInfo = channelDb.get(interaction.channelId);
+  const channelInfo = await validateAgentChannel(interaction);
   if (!channelInfo) {
-    await interaction.editReply('❌ This channel is not connected to an agent. Use `/agents connect` first.');
     return;
   }
+
+  await interaction.deferReply({ ephemeral: true });
 
   const dbThreads = threadDb.listByChannel(interaction.channelId);
   if (dbThreads.length === 0) {
