@@ -73,7 +73,7 @@ async function handleNew(interaction: ChatInputCommandInteraction): Promise<void
   threadDb.register(thread.id, interaction.channelId, channelInfo.agent_id, interaction.user.id);
 
   await thread.send(
-    `🤖 **${channelInfo.agent_name}** — ready for a new session.\nType your first message to begin. This thread is linked to a dedicated Maestro session.`
+    `🤖 **${channelInfo.agent_name}** — ready for a new session.\nType your first message to begin. This thread is linked to a dedicated Maestro session.\nOnly <@${interaction.user.id}> can interact with the agent in this thread.`
   );
 
   await interaction.editReply(
