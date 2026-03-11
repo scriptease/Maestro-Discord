@@ -70,7 +70,7 @@ async function handleNew(interaction: ChatInputCommandInteraction): Promise<void
     reason: `Maestro session for agent ${channelInfo.agent_name}`,
   });
 
-  threadDb.register(thread.id, interaction.channelId, channelInfo.agent_id);
+  threadDb.register(thread.id, interaction.channelId, channelInfo.agent_id, interaction.user.id);
 
   await thread.send(
     `🤖 **${channelInfo.agent_name}** — ready for a new session.\nType your first message to begin. This thread is linked to a dedicated Maestro session.`

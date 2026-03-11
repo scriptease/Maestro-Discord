@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import { ensureOwnerUserIdColumn } from './migrations';
 
 const db = new Database(path.join(__dirname, '../../maestro-bot.db'));
 
@@ -19,10 +20,12 @@ db.exec(`
     thread_id  TEXT PRIMARY KEY,
     channel_id TEXT NOT NULL,
     agent_id   TEXT NOT NULL,
+    owner_user_id TEXT,
     session_id TEXT,
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   )
 `);
+ensureOwnerUserIdColumn(db);
 
 export interface AgentChannel {
   channel_id: string;
@@ -65,14 +68,17 @@ export interface AgentThread {
   thread_id:  string;
   channel_id: string;
   agent_id:   string;
+  owner_user_id: string | null;
   session_id: string | null;
   created_at: number;
 }
 
 export const threadDb = {
-  register(threadId: string, channelId: string, agentId: string): void {
-    db.prepare('INSERT INTO agent_threads (thread_id, channel_id, agent_id) VALUES (?, ?, ?)')
-      .run(threadId, channelId, agentId);
+  register(threadId: string, channelId: string, agentId: string, ownerUserId: string): void {
+    db.prepare(`
+      INSERT INTO agent_threads (thread_id, channel_id, agent_id, owner_user_id)
+      VALUES (?, ?, ?, ?)
+    `).run(threadId, channelId, agentId, ownerUserId);
   },
 
   get(threadId: string): AgentThread | undefined {
