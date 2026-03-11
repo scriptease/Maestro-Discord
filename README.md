@@ -38,6 +38,7 @@ Set these values in `.env`:
 DISCORD_BOT_TOKEN=   # Bot token from Discord Developer Portal
 DISCORD_CLIENT_ID=   # Application ID from Discord Developer Portal
 DISCORD_GUILD_ID=    # Your server's ID (right-click server → Copy ID)
+DISCORD_ALLOWED_USER_IDS=123,456  # Optional: comma-separated user IDs allowed to run slash commands
 ```
 
 3. Deploy slash commands:
@@ -84,7 +85,10 @@ node --test --experimental-test-coverage --import tsx
 
 - `/agents list` reads running agents from Maestro.
 - `/agents new` creates a text channel under the **Maestro Agents** category.
-- Messages in agent channels are queued and forwarded to `maestro-cli`.
+- Mention flow: in a registered agent channel, user sends `@bot ...` and the bot creates a dedicated thread bound to that user.
+- Only the bound owner can trigger agent responses inside that thread. Messages from other users are silently ignored.
+- `/session new` also creates an owner-bound thread for the command invoker.
+- Messages in registered, owner-authorized threads are queued and forwarded to `maestro-cli`.
 - The bot adds a ⏳ reaction while waiting, shows typing, and splits long replies.
 - After each response, it posts a small usage footer with tokens, cost, and context.
 
@@ -101,10 +105,11 @@ Delete this file to reset all channel bindings.
 - Add Reactions
 - Read Message History
 
-## Security note
+## Security
 
-Only invite this bot to private servers you trust. There is currently no access control
-beyond Discord permissions.
+- Slash command access can be limited with `DISCORD_ALLOWED_USER_IDS`.
+- Mention-created and `/session new` threads are bound to a single owner.
+- In bound threads, non-owner messages are ignored without bot replies.
 
 ## Troubleshooting
 
