@@ -26,6 +26,14 @@ client.once('ready', (c) => {
 
 client.on('interactionCreate', async (interaction: Interaction) => {
   if (!interaction.isChatInputCommand()) return;
+  if (!config.allowedUserIds.includes(interaction.user.id)) {
+    await interaction.reply({
+      content: '❌ You are not authorized to use this bot.',
+      ephemeral: true,
+    });
+    return;
+  }
+
   const cmd = commands.get(interaction.commandName);
   if (!cmd) return;
   try {
