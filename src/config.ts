@@ -7,8 +7,23 @@ export function required(key: string): string {
   return val;
 }
 
+function requiredCsv(key: string): string[] {
+  const val = required(key);
+  const parsed = val
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+  if (parsed.length === 0) {
+    throw new Error(`Env var ${key} must contain at least one value`);
+  }
+
+  return parsed;
+}
+
 export const config = {
   token: required('DISCORD_BOT_TOKEN'),
   clientId: required('DISCORD_CLIENT_ID'),
   guildId: required('DISCORD_GUILD_ID'),
+  allowedUserIds: requiredCsv('DISCORD_ALLOWED_USER_IDS'),
 };
