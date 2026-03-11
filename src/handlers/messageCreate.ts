@@ -50,6 +50,9 @@ export function createMessageCreateHandler(deps: MessageCreateDeps) {
     const threadInfo = deps.threadDb.get(message.channel.id);
     if (!threadInfo) return;
 
+    const ownerUserId = threadInfo.owner_user_id?.trim();
+    if (ownerUserId && ownerUserId !== message.author.id) return;
+
     deps.enqueue(message);
   };
 }
