@@ -63,7 +63,8 @@ async function processNext(channelId: string): Promise<void> {
   channel.sendTyping().catch(() => {});
 
   try {
-    const result = await maestro.send(agentId, message.content, sessionId);
+    const readOnly = !!channelInfo.read_only;
+    const result = await maestro.send(agentId, message.content, sessionId, readOnly);
 
     // Persist session ID from first response
     if (!sessionId && result.sessionId) {
@@ -83,17 +84,24 @@ async function processNext(channelId: string): Promise<void> {
       // Ignore if already removed or no permission
     }
 
-    // Post response, splitting if > 2000 chars
-    const parts = splitMessage(result.response);
-    for (const part of parts) {
-      await channel.send(part);
+    // Handle agent failure (e.g. read-only mode blocked a write)
+    if (!result.success || !result.response) {
+      const reason = result.error ?? 'The agent could not complete this request.';
+      const hint = readOnly ? '\n-# The agent is in **read-only** mode and cannot modify files.' : '';
+      await channel.send(`⚠️ ${reason}${hint}`);
+    } else {
+      // Post response, splitting if > 2000 chars
+      const parts = splitMessage(result.response);
+      for (const part of parts) {
+        await channel.send(part);
+      }
     }
 
     // Post usage footer as a subtle follow-up
     const cost = result.usage.totalCostUsd.toFixed(4);
     const ctx = result.usage.contextUsagePercent.toFixed(1);
     await channel.send(
-      `-# 💬 ${result.usage.inputTokens + result.usage.outputTokens} tokens • $${cost} • ${ctx}% context`
+      `-# 💬 ${result.usage.inputTokens + result.usage.outputTokens} tokens • $${cost} • ${ctx}% context${readOnly ? ' • 📖 read-only' : ''}`
     );
 
   } catch (err) {

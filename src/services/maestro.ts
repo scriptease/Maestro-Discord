@@ -30,8 +30,9 @@ export interface SendResult {
   agentId: string;
   agentName: string;
   sessionId: string;
-  response: string;
+  response: string | null;
   success: boolean;
+  error?: string;
   usage: {
     inputTokens: number;
     outputTokens: number;
@@ -43,17 +44,64 @@ export interface SendResult {
   };
 }
 
+export interface MaestroPlaybook {
+  id: string;
+  name: string;
+  description: string;
+  documentCount: number;
+  taskCount: number;
+  agentId?: string;
+  agentName?: string;
+  [key: string]: unknown;
+}
+
+export interface MaestroPlaybookDetail extends MaestroPlaybook {
+  documents: Array<{
+    path: string;
+    taskCount: number;
+    completedCount: number;
+  }>;
+}
+
+export interface PlaybookEvent {
+  type: 'start' | 'document_start' | 'task_start' | 'task_complete' | 'document_complete' | 'loop_complete' | 'complete';
+  timestamp: number;
+  success?: boolean;
+  summary?: string;
+  totalTasksCompleted?: number;
+  totalElapsedMs?: number;
+  totalCost?: number;
+  [key: string]: unknown;
+}
+
 // --- Helpers ---
 
-async function run(args: string[]): Promise<string> {
+type RunOptions = {
+  timeoutMs?: number;
+  maxBuffer?: number;
+};
+
+const DEFAULT_TIMEOUT_MS = 30 * 1000;
+const SEND_TIMEOUT_MS = 5 * 60 * 1000; // 5 min — agent responses can take a while
+const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024; // 10MB
+
+async function run(args: string[], opts: RunOptions = {}): Promise<string> {
   try {
     const { stdout } = (await execFileAsync('maestro-cli', args, {
-      timeout: 5 * 60 * 1000, // 5 min timeout for long agent responses
+      timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      maxBuffer: opts.maxBuffer ?? DEFAULT_MAX_BUFFER,
     })) as { stdout: string; stderr: string };
     return stdout.trim();
   } catch (err: unknown) {
-    const e = err as { message?: string; stderr?: string; stdout?: string };
-    const detail = e.stderr?.trim() || e.stdout?.trim() || e.message || String(err);
+    const e = err as { message?: string; stderr?: string; stdout?: string; code?: string | number; killed?: boolean };
+    const parts: string[] = [];
+    if (e.killed) parts.push('process killed (timeout?)');
+    if (e.code) parts.push(`exit code: ${e.code}`);
+    if (e.stderr?.trim()) parts.push(`stderr: ${e.stderr.trim()}`);
+    if (e.stdout?.trim()) parts.push(`stdout: ${e.stdout.trim()}`);
+    if (parts.length === 0) parts.push(e.message || String(err));
+    const detail = parts.join(' | ');
+    console.error(`[maestro-cli ${args[0]}] ${detail}`);
     throw new Error(`maestro-cli ${args[0]} failed: ${detail}`);
   }
 }
@@ -88,10 +136,64 @@ export const maestro = {
    * If sessionId is provided, resumes that session; otherwise starts a new one.
    * Returns the full structured response.
    */
-  async send(agentId: string, message: string, sessionId?: string): Promise<SendResult> {
+  async send(agentId: string, message: string, sessionId?: string, readOnly?: boolean): Promise<SendResult> {
     const args = ['send', agentId, message];
     if (sessionId) args.push('-s', sessionId);
+    if (readOnly) args.push('-r');
+    try {
+      const raw = await run(args, { timeoutMs: SEND_TIMEOUT_MS });
+      return JSON.parse(raw) as SendResult;
+    } catch (err: unknown) {
+      // CLI may exit non-zero but still return valid JSON (e.g. read-only rejection)
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const stdoutMatch = errMsg.match(/stdout: ({[\s\S]*})/);
+      if (stdoutMatch) {
+        try {
+          const parsed = JSON.parse(stdoutMatch[1]) as SendResult;
+          if (parsed.agentId && parsed.usage) return parsed;
+        } catch { /* not valid JSON, fall through */ }
+      }
+      throw err;
+    }
+  },
+
+  /** List all playbooks, optionally filtered by agent */
+  async listPlaybooks(agentId?: string): Promise<MaestroPlaybook[]> {
+    const args = ['list', 'playbooks', '--json'];
+    if (agentId) args.push('-a', agentId);
     const raw = await run(args);
-    return JSON.parse(raw) as SendResult;
+    return JSON.parse(raw) as MaestroPlaybook[];
+  },
+
+  /** Show detailed info for a single playbook */
+  async showPlaybook(playbookId: string): Promise<MaestroPlaybookDetail> {
+    const raw = await run(['show', 'playbook', playbookId, '--json']);
+    return JSON.parse(raw) as MaestroPlaybookDetail;
+  },
+
+  /** Run a playbook and return the final completion event. Uses --wait so the CLI blocks until done. */
+  async runPlaybook(playbookId: string): Promise<PlaybookEvent> {
+    const raw = await run(['playbook', playbookId, '--wait'], {
+      timeoutMs: 30 * 60 * 1000,
+      maxBuffer: 100 * 1024 * 1024, // 100MB for long JSONL output
+    });
+    const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      const line = lines[i];
+      try {
+        const parsed = JSON.parse(line) as Record<string, unknown>;
+        if (parsed.type === 'complete' && typeof parsed.timestamp === 'number') {
+          return parsed as PlaybookEvent;
+        }
+      } catch {
+        // Ignore non-JSON lines; some CLI output may include extra text.
+      }
+    }
+
+    const tail = lines.slice(-5).join('\n');
+    throw new Error(
+      `maestro-cli playbook did not emit a completion event for playbook "${playbookId}". Last lines:\n${tail || '(no output)'}`,
+    );
   },
 };
