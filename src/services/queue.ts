@@ -63,7 +63,8 @@ async function processNext(channelId: string): Promise<void> {
   channel.sendTyping().catch(() => {});
 
   try {
-    const result = await maestro.send(agentId, message.content, sessionId);
+    const readOnly = !!channelInfo.read_only;
+    const result = await maestro.send(agentId, message.content, sessionId, readOnly);
 
     // Persist session ID from first response
     if (!sessionId && result.sessionId) {
@@ -93,7 +94,7 @@ async function processNext(channelId: string): Promise<void> {
     const cost = result.usage.totalCostUsd.toFixed(4);
     const ctx = result.usage.contextUsagePercent.toFixed(1);
     await channel.send(
-      `-# 💬 ${result.usage.inputTokens + result.usage.outputTokens} tokens • $${cost} • ${ctx}% context`
+      `-# 💬 ${result.usage.inputTokens + result.usage.outputTokens} tokens • $${cost} • ${ctx}% context${readOnly ? ' • 📖 read-only' : ''}`
     );
 
   } catch (err) {

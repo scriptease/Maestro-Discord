@@ -81,6 +81,7 @@ type RunOptions = {
 };
 
 const DEFAULT_TIMEOUT_MS = 30 * 1000;
+const SEND_TIMEOUT_MS = 5 * 60 * 1000; // 5 min — agent responses can take a while
 const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024; // 10MB
 
 async function run(args: string[], opts: RunOptions = {}): Promise<string> {
@@ -91,8 +92,15 @@ async function run(args: string[], opts: RunOptions = {}): Promise<string> {
     })) as { stdout: string; stderr: string };
     return stdout.trim();
   } catch (err: unknown) {
-    const e = err as { message?: string; stderr?: string; stdout?: string };
-    const detail = e.stderr?.trim() || e.stdout?.trim() || e.message || String(err);
+    const e = err as { message?: string; stderr?: string; stdout?: string; code?: string | number; killed?: boolean };
+    const parts: string[] = [];
+    if (e.killed) parts.push('process killed (timeout?)');
+    if (e.code) parts.push(`exit code: ${e.code}`);
+    if (e.stderr?.trim()) parts.push(`stderr: ${e.stderr.trim()}`);
+    if (e.stdout?.trim()) parts.push(`stdout: ${e.stdout.trim()}`);
+    if (parts.length === 0) parts.push(e.message || String(err));
+    const detail = parts.join(' | ');
+    console.error(`[maestro-cli ${args[0]}] ${detail}`);
     throw new Error(`maestro-cli ${args[0]} failed: ${detail}`);
   }
 }
@@ -127,10 +135,11 @@ export const maestro = {
    * If sessionId is provided, resumes that session; otherwise starts a new one.
    * Returns the full structured response.
    */
-  async send(agentId: string, message: string, sessionId?: string): Promise<SendResult> {
+  async send(agentId: string, message: string, sessionId?: string, readOnly?: boolean): Promise<SendResult> {
     const args = ['send', agentId, message];
     if (sessionId) args.push('-s', sessionId);
-    const raw = await run(args);
+    if (readOnly) args.push('-r');
+    const raw = await run(args, { timeoutMs: SEND_TIMEOUT_MS });
     return JSON.parse(raw) as SendResult;
   },
 

@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import { ensureOwnerUserIdColumn } from './migrations';
+import { ensureOwnerUserIdColumn, ensureReadOnlyColumn } from './migrations';
 
 const db = new Database(path.join(__dirname, '../../maestro-bot.db'));
 
@@ -26,6 +26,7 @@ db.exec(`
   )
 `);
 ensureOwnerUserIdColumn(db);
+ensureReadOnlyColumn(db);
 
 export interface AgentChannel {
   channel_id: string;
@@ -33,6 +34,7 @@ export interface AgentChannel {
   agent_id: string;
   agent_name: string;
   session_id: string | null;
+  read_only: number;
   created_at: number;
 }
 
@@ -52,6 +54,11 @@ export const channelDb = {
   updateSession(channelId: string, sessionId: string | null): void {
     db.prepare('UPDATE agent_channels SET session_id = ? WHERE channel_id = ?')
       .run(sessionId, channelId);
+  },
+
+  setReadOnly(channelId: string, readOnly: boolean): void {
+    db.prepare('UPDATE agent_channels SET read_only = ? WHERE channel_id = ?')
+      .run(readOnly ? 1 : 0, channelId);
   },
 
   remove(channelId: string): void {

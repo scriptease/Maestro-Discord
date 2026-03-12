@@ -23,7 +23,19 @@ export const data = new SlashCommandBuilder()
           .setRequired(true)
       )
   )
-  .addSubcommand((sub) => sub.setName('disconnect').setDescription('Remove this agent channel (deletes the channel)'));
+  .addSubcommand((sub) => sub.setName('disconnect').setDescription('Remove this agent channel (deletes the channel)'))
+  .addSubcommand((sub) =>
+    sub
+      .setName('readonly')
+      .setDescription('Toggle read-only mode for this agent channel')
+      .addStringOption((opt) =>
+        opt
+          .setName('mode')
+          .setDescription('Turn read-only on or off')
+          .setRequired(true)
+          .addChoices({ name: 'on', value: 'on' }, { name: 'off', value: 'off' })
+      )
+  );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const sub = interaction.options.getSubcommand();
@@ -34,6 +46,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await handleNew(interaction);
   } else if (sub === 'disconnect') {
     await handleDisconnect(interaction);
+  } else if (sub === 'readonly') {
+    await handleReadonly(interaction);
   }
 }
 
@@ -132,6 +146,28 @@ async function handleNew(interaction: ChatInputCommandInteraction): Promise<void
       `Type any message here and it will be sent to this agent.\n` +
       `-# Agent: \`${agent.id}\` • ${agent.toolType} • \`${agent.cwd}\``
   );
+}
+
+async function handleReadonly(interaction: ChatInputCommandInteraction): Promise<void> {
+  const channelInfo = channelDb.get(interaction.channelId);
+  if (!channelInfo) {
+    await interaction.reply({ content: 'This channel is not an agent channel.', ephemeral: true });
+    return;
+  }
+
+  const mode = interaction.options.getString('mode', true);
+  const readOnly = mode === 'on';
+  channelDb.setReadOnly(interaction.channelId, readOnly);
+
+  const embed = new EmbedBuilder()
+    .setColor(readOnly ? 0xf0b232 : 0x57f287)
+    .setDescription(
+      readOnly
+        ? `📖 **${channelInfo.agent_name}** is now in **read-only** mode. The agent cannot modify files.`
+        : `✏️ **${channelInfo.agent_name}** is back to **read-write** mode.`
+    );
+
+  await interaction.reply({ embeds: [embed] });
 }
 
 async function handleDisconnect(interaction: ChatInputCommandInteraction): Promise<void> {

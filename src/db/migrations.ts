@@ -12,3 +12,16 @@ export function ensureOwnerUserIdColumn(database: Database.Database): void {
     }
   }
 }
+
+export function ensureReadOnlyColumn(database: Database.Database): void {
+  try {
+    database.exec('ALTER TABLE agent_channels ADD COLUMN read_only INTEGER DEFAULT 0');
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !error.message.toLowerCase().includes('duplicate column name')
+    ) {
+      throw error;
+    }
+  }
+}
