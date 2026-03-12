@@ -52,6 +52,16 @@ export function createMessageCreateHandler(deps: MessageCreateDeps) {
 
       deps.threadDb.register(thread.id, message.channel.id, channelInfo.agent_id, message.author.id);
       await thread.send(`This thread is bound to <@${message.author.id}>.`);
+
+      // Forward the triggering message to the agent via the new thread
+      // Strip the bot mention prefix so the agent gets clean content
+      const cleanContent = message.content
+        .replace(new RegExp(`<@!?${botUserId}>`, 'g'), '')
+        .trim();
+      if (cleanContent) {
+        const threadMessage = await thread.send(cleanContent);
+        deps.enqueue(threadMessage);
+      }
       return;
     }
 

@@ -154,9 +154,23 @@ export const maestro = {
       timeoutMs: 30 * 60 * 1000,
       maxBuffer: 100 * 1024 * 1024, // 100MB for long JSONL output
     });
-    // --wait streams JSONL events; the last line is the "complete" event
-    const lines = raw.trim().split('\n');
-    const lastLine = lines[lines.length - 1];
-    return JSON.parse(lastLine) as PlaybookEvent;
+    const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      const line = lines[i];
+      try {
+        const parsed = JSON.parse(line) as Record<string, unknown>;
+        if ((parsed.type === 'complete' || parsed.event === 'complete') && typeof parsed.timestamp === 'number') {
+          return parsed as PlaybookEvent;
+        }
+      } catch {
+        // Ignore non-JSON lines; some CLI output may include extra text.
+      }
+    }
+
+    const tail = lines.slice(-5).join('\n');
+    throw new Error(
+      `maestro-cli playbook did not emit a completion event for playbook "${playbookId}". Last lines:\n${tail || '(no output)'}`,
+    );
   },
 };

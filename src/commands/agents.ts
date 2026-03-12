@@ -47,17 +47,34 @@ async function handleList(interaction: ChatInputCommandInteraction): Promise<voi
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle('Maestro Agents')
-    .setColor(0x5865f2)
-    .setDescription(
-      agents
-        .map((a) => `**${a.name}**\n\`${a.id}\`  •  ${a.toolType}  •  \`${a.cwd}\``)
-        .join('\n\n')
-    )
-    .setFooter({ text: 'Use /agents new <agent-id> to start a conversation' });
+  const lines = agents.map(
+    (a) => `**${a.name}**\n\`${a.id}\`  •  ${a.toolType}  •  \`${a.cwd}\``
+  );
 
-  await interaction.editReply({ embeds: [embed] });
+  // Split into chunks that fit Discord's 4096-char embed description limit
+  const chunks: string[] = [];
+  let current = '';
+  for (const line of lines) {
+    const addition = current ? '\n\n' + line : line;
+    if (current.length + addition.length > 4096) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current += addition;
+    }
+  }
+  if (current) chunks.push(current);
+
+  // Discord allows up to 10 embeds per message
+  const embeds = chunks.slice(0, 10).map((chunk, i) => {
+    const embed = new EmbedBuilder().setColor(0x5865f2).setDescription(chunk);
+    if (i === 0) embed.setTitle('Maestro Agents');
+    if (i === chunks.length - 1)
+      embed.setFooter({ text: 'Use /agents new <agent-id> to start a conversation' });
+    return embed;
+  });
+
+  await interaction.editReply({ embeds });
 }
 
 async function handleNew(interaction: ChatInputCommandInteraction): Promise<void> {

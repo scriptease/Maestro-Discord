@@ -85,7 +85,7 @@ node --test --experimental-test-coverage --import tsx
 
 - `/agents list` reads running agents from Maestro.
 - `/agents new` creates a text channel under the **Maestro Agents** category.
-- Mention flow: in a registered agent channel, user sends `@bot ...` and the bot creates a dedicated thread bound to that user.
+- Mention flow: in a registered agent channel, user sends `@bot ...` and the bot creates a dedicated thread bound to that user. The triggering message is forwarded to the agent so the user gets an immediate response.
 - Only the bound owner can trigger agent responses inside that thread. Messages from other users are silently ignored.
 - `/session new` also creates an owner-bound thread for the command invoker.
 - Messages in registered, owner-authorized threads are queued and forwarded to `maestro-cli`.
