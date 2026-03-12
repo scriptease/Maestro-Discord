@@ -84,10 +84,17 @@ async function processNext(channelId: string): Promise<void> {
       // Ignore if already removed or no permission
     }
 
-    // Post response, splitting if > 2000 chars
-    const parts = splitMessage(result.response);
-    for (const part of parts) {
-      await channel.send(part);
+    // Handle agent failure (e.g. read-only mode blocked a write)
+    if (!result.success || !result.response) {
+      const reason = result.error ?? 'The agent could not complete this request.';
+      const hint = readOnly ? '\n-# The agent is in **read-only** mode and cannot modify files.' : '';
+      await channel.send(`⚠️ ${reason}${hint}`);
+    } else {
+      // Post response, splitting if > 2000 chars
+      const parts = splitMessage(result.response);
+      for (const part of parts) {
+        await channel.send(part);
+      }
     }
 
     // Post usage footer as a subtle follow-up

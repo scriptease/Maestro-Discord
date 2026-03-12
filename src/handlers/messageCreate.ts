@@ -7,7 +7,7 @@ type MessageCreateDeps = {
   threadDb: Pick<typeof threadDb, 'get' | 'register'>;
   getBotUserId: (message: Message) => string | undefined;
   enqueue: (message: Message) => void;
-  logger?: Pick<Console, 'warn'>;
+  logger?: Pick<Console, 'warn' | 'error'>;
 };
 
 export function createMessageCreateHandler(deps: MessageCreateDeps) {
@@ -31,36 +31,55 @@ export function createMessageCreateHandler(deps: MessageCreateDeps) {
 
     if (!message.channel.isThread()) {
       const channelInfo = deps.channelDb.get(message.channel.id);
-      if (!channelInfo) return;
+      if (!channelInfo) {
+        console.debug(`[mention] channel ${message.channel.id} not registered, ignoring`);
+        return;
+      }
 
-      const mentionedByMetadata = message.mentions.users.has(botUserId);
+      // Detect both direct user mentions (@bot) and role mentions (@BotRole)
+      const mentionedByUser = message.mentions.users.has(botUserId);
+      const botRoleId = message.guild?.members?.me?.roles.botRole?.id;
+      const mentionedByRole = !!(botRoleId && message.mentions.roles?.has(botRoleId));
       const mentionedByContent =
         message.content.includes(`<@${botUserId}>`) ||
-        message.content.includes(`<@!${botUserId}>`);
-      if (!mentionedByMetadata && !mentionedByContent) return;
+        message.content.includes(`<@!${botUserId}>`) ||
+        (!!botRoleId && message.content.includes(`<@&${botRoleId}>`));
+      console.debug(`[mention] botUserId=${botUserId} botRoleId=${botRoleId} user=${mentionedByUser} role=${mentionedByRole} content=${mentionedByContent} raw=${JSON.stringify(message.content)}`);
+      if (!mentionedByUser && !mentionedByRole && !mentionedByContent) return;
 
-      const authorName = message.member?.displayName ?? message.author.username ?? message.author.id;
-      const safeAuthorName = authorName.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 48);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const threadName = `${safeAuthorName || 'user'}-${timestamp}`.slice(0, 100);
+      try {
+        const authorName = message.member?.displayName ?? message.author.username ?? message.author.id;
+        const safeAuthorName = authorName.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 48);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const threadName = `${safeAuthorName || 'user'}-${timestamp}`.slice(0, 100);
 
-      const thread = await (message.channel as TextChannel).threads.create({
-        name: threadName,
-        autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
-        reason: `Mention-triggered thread for ${message.author.id}`,
-      });
+        const thread = await (message.channel as TextChannel).threads.create({
+          name: threadName,
+          autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
+          reason: `Mention-triggered thread for ${message.author.id}`,
+        });
 
-      deps.threadDb.register(thread.id, message.channel.id, channelInfo.agent_id, message.author.id);
-      await thread.send(`This thread is bound to <@${message.author.id}>.`);
+        deps.threadDb.register(thread.id, message.channel.id, channelInfo.agent_id, message.author.id);
+        await thread.send(`This thread is bound to <@${message.author.id}>.`);
 
-      // Forward the triggering message to the agent via the new thread
-      // Strip the bot mention prefix so the agent gets clean content
-      const cleanContent = message.content
-        .replace(new RegExp(`<@!?${botUserId}>`, 'g'), '')
-        .trim();
-      if (cleanContent) {
-        const threadMessage = await thread.send(cleanContent);
-        deps.enqueue(threadMessage);
+        // Forward the triggering message to the agent via the new thread
+        // Strip the bot mention prefix so the agent gets clean content
+        const mentionPattern = botRoleId
+          ? new RegExp(`<@!?${botUserId}>|<@&${botRoleId}>`, 'g')
+          : new RegExp(`<@!?${botUserId}>`, 'g');
+        const cleanContent = message.content.replace(mentionPattern, '').trim();
+        if (cleanContent) {
+          const threadMessage = await thread.send(cleanContent);
+          deps.enqueue(threadMessage);
+        }
+      } catch (err) {
+        const log = deps.logger?.error ?? console.error;
+        log('messageCreate: failed to create thread for mention:', err);
+        try {
+          await message.reply('❌ Failed to create a thread for this mention.');
+        } catch {
+          // Reply may also fail if permissions are missing
+        }
       }
       return;
     }

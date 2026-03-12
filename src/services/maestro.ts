@@ -30,8 +30,9 @@ export interface SendResult {
   agentId: string;
   agentName: string;
   sessionId: string;
-  response: string;
+  response: string | null;
   success: boolean;
+  error?: string;
   usage: {
     inputTokens: number;
     outputTokens: number;
@@ -139,8 +140,21 @@ export const maestro = {
     const args = ['send', agentId, message];
     if (sessionId) args.push('-s', sessionId);
     if (readOnly) args.push('-r');
-    const raw = await run(args, { timeoutMs: SEND_TIMEOUT_MS });
-    return JSON.parse(raw) as SendResult;
+    try {
+      const raw = await run(args, { timeoutMs: SEND_TIMEOUT_MS });
+      return JSON.parse(raw) as SendResult;
+    } catch (err: unknown) {
+      // CLI may exit non-zero but still return valid JSON (e.g. read-only rejection)
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const stdoutMatch = errMsg.match(/stdout: ({[\s\S]*})/);
+      if (stdoutMatch) {
+        try {
+          const parsed = JSON.parse(stdoutMatch[1]) as SendResult;
+          if (parsed.agentId && parsed.usage) return parsed;
+        } catch { /* not valid JSON, fall through */ }
+      }
+      throw err;
+    }
   },
 
   /** List all playbooks, optionally filtered by agent */
