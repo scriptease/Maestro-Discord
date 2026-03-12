@@ -48,39 +48,35 @@ async function handleList(interaction: ChatInputCommandInteraction): Promise<voi
   }
 
   const lines = agents.map(
-    (a) => `**${a.name}**\n\`${a.id}\`  •  ${a.toolType}  •  \`${a.cwd}\``
+    (a) => `**${a.name}** · \`${a.id}\` · ${a.toolType}`
   );
 
-  // Split into chunks that fit Discord's 4096-char embed description limit
-  const chunks: string[] = [];
-  let current = '';
+  // Build a single embed; Discord limits description to 4096 chars and
+  // total embed content to 6000 chars per message.  With compact one-line
+  // entries (~60 chars each) this comfortably fits ~65 agents.
+  const MAX_DESC = 4096;
+  let description = '';
+  let shown = 0;
   for (const line of lines) {
-    const addition = current ? '\n\n' + line : line;
-    if (current.length + addition.length > 4096) {
-      chunks.push(current);
-      current = line;
-    } else {
-      current += addition;
-    }
+    const addition = description ? '\n' + line : line;
+    if (description.length + addition.length > MAX_DESC) break;
+    description += addition;
+    shown++;
   }
-  if (current) chunks.push(current);
 
-  // Discord allows up to 10 embeds per message
-  const visibleChunks = chunks.slice(0, 10);
-  const truncated = chunks.length > 10;
-  const embeds = visibleChunks.map((chunk, i) => {
-    const embed = new EmbedBuilder().setColor(0x5865f2).setDescription(chunk);
-    if (i === 0) embed.setTitle('Maestro Agents');
-    if (i === visibleChunks.length - 1) {
-      const footerText = truncated
-        ? `Showing ${visibleChunks.length} of ${chunks.length} pages — some agents are hidden. Use /agents new <agent-id> to start a conversation`
-        : 'Use /agents new <agent-id> to start a conversation';
-      embed.setFooter({ text: footerText });
-    }
-    return embed;
-  });
+  const embed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle('Maestro Agents')
+    .setDescription(description);
 
-  await interaction.editReply({ embeds });
+  const footerParts: string[] = [];
+  if (shown < agents.length) {
+    footerParts.push(`Showing ${shown} of ${agents.length} agents`);
+  }
+  footerParts.push('Use /agents new <agent-id> to start a conversation');
+  embed.setFooter({ text: footerParts.join(' · ') });
+
+  await interaction.editReply({ embeds: [embed] });
 }
 
 async function handleNew(interaction: ChatInputCommandInteraction): Promise<void> {
