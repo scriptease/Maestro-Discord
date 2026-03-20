@@ -12,9 +12,13 @@ async function ensureDir(): Promise<void> {
   dirReady = true;
 }
 
+function sanitize(value: string): string {
+  return value.replace(/[\r\n]+/g, '\\n');
+}
+
 function formatEntry(level: string, context: string, detail: string): string {
   const ts = new Date().toISOString();
-  return `[${ts}] ${level} [${context}] ${detail}\n`;
+  return `[${ts}] ${level} [${sanitize(context)}] ${sanitize(detail)}\n`;
 }
 
 export const logger = {

@@ -89,7 +89,7 @@ async function processNext(channelId: string): Promise<void> {
     if (!result.success || !result.response) {
       const reason = result.error ?? 'The agent could not complete this request.';
       const hint = readOnly ? '\n-# The agent is in **read-only** mode and cannot modify files.' : '';
-      await logger.error('queue:agent-failure', `agent=${agentId} session=${sessionId ?? 'new'} channel=${channelId} reason=${reason}`);
+      void logger.error('queue:agent-failure', `agent=${agentId} session=${sessionId ?? 'new'} channel=${channelId} reason=${reason}`);
       await channel.send(`⚠️ ${reason}${hint}`);
     } else {
       // Post response, splitting if > 2000 chars
@@ -114,7 +114,7 @@ async function processNext(channelId: string): Promise<void> {
     } catch {}
 
     const errMsg = err instanceof Error ? err.message : String(err);
-    await logger.error('queue:send-error', `agent=${agentId} session=${sessionId ?? 'new'} channel=${channelId} error=${errMsg}`);
+    void logger.error('queue:send-error', `agent=${agentId} session=${sessionId ?? 'new'} channel=${channelId} error=${errMsg}`);
     await channel.send(`❌ Failed to get response from agent:\n\`\`\`\n${errMsg}\n\`\`\``);
   }
 
