@@ -8,6 +8,7 @@ import {
 } from 'discord.js';
 import { maestro } from '../services/maestro';
 import { channelDb } from '../db';
+import { cleanupAgentFiles } from '../utils/attachments';
 
 export const data = new SlashCommandBuilder()
   .setName('agents')
@@ -196,6 +197,27 @@ async function handleDisconnect(interaction: ChatInputCommandInteraction): Promi
   }
 
   await interaction.reply({ content: `Disconnecting **${channelInfo.agent_name}**...`, ephemeral: true });
+
+  // Clean up downloaded files if this is the last channel for this agent
+  const agentId = channelInfo.agent_id;
+  const otherChannels = channelDb.getByAgentId(agentId).filter(
+    (c) => c.channel_id !== interaction.channelId,
+  );
+
+  if (otherChannels.length === 0) {
+    try {
+      const agentCwd = await maestro.getAgentCwd(agentId);
+      if (agentCwd) {
+        await cleanupAgentFiles(agentCwd);
+        console.log(`[disconnect] Cleaned up files for agent ${agentId}`);
+      }
+    } catch (err) {
+      console.warn(`[disconnect] Failed to clean up files for agent ${agentId}:`, err);
+    }
+  } else {
+    console.log(`[disconnect] Skipping file cleanup for agent ${agentId} — ${otherChannels.length} other channel(s) still active`);
+  }
+
   channelDb.remove(interaction.channelId);
 
   setTimeout(async () => {

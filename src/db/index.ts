@@ -65,6 +65,11 @@ export const channelDb = {
     db.prepare('DELETE FROM agent_channels WHERE channel_id = ?').run(channelId);
   },
 
+  getByAgentId(agentId: string): AgentChannel[] {
+    return db.prepare('SELECT * FROM agent_channels WHERE agent_id = ?')
+      .all(agentId) as AgentChannel[];
+  },
+
   listByGuild(guildId: string): AgentChannel[] {
     return db.prepare('SELECT * FROM agent_channels WHERE guild_id = ?')
       .all(guildId) as AgentChannel[];
