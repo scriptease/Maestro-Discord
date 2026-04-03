@@ -1,0 +1,179 @@
+import test, { beforeEach, mock } from 'node:test';
+import assert from 'node:assert/strict';
+import { createQueue, QueueDeps } from '../services/queueFactory';
+
+// --- Helpers ---
+
+function makeMessage(overrides: Record<string, unknown> = {}) {
+  return {
+    content: 'hello',
+    attachments: { size: 0, values: () => [] },
+    channel: {
+      id: 'thread-1',
+      isThread: () => true,
+      send: mock.fn(async () => {}),
+      sendTyping: mock.fn(async () => {}),
+    },
+    react: mock.fn(async () => ({ remove: mock.fn(async () => {}) })),
+    ...overrides,
+  } as any;
+}
+
+function defaultSendResult(extra: Record<string, unknown> = {}) {
+  return {
+    success: true,
+    response: 'Agent response',
+    sessionId: 'session-1',
+    usage: { inputTokens: 100, outputTokens: 50, totalCostUsd: 0.001, contextUsagePercent: 5 },
+    ...extra,
+  };
+}
+
+function createMockDeps(): QueueDeps & { _mocks: Record<string, ReturnType<typeof mock.fn>> } {
+  const mockGetAgentCwd = mock.fn(async () => '/home/agent' as string | null);
+  const mockSend = mock.fn(async () => defaultSendResult());
+  const mockDownload = mock.fn(async () => [] as { originalName: string; savedPath: string }[]);
+  const mockFormat = mock.fn(() => '');
+  const mockLoggerError = mock.fn();
+  const mockChannelGet = mock.fn(() => ({
+    channel_id: 'channel-1',
+    agent_id: 'agent-1',
+    session_id: 'session-1',
+  }) as any);
+  const mockThreadGet = mock.fn(() => ({
+    thread_id: 'thread-1',
+    channel_id: 'channel-1',
+    agent_id: 'agent-1',
+    session_id: 'session-1',
+  }) as any);
+
+  return {
+    maestro: { getAgentCwd: mockGetAgentCwd as any, send: mockSend as any },
+    channelDb: { get: mockChannelGet as any, updateSession: mock.fn() },
+    threadDb: { get: mockThreadGet as any, updateSession: mock.fn() },
+    splitMessage: (text: string) => [text],
+    downloadAttachments: mockDownload as any,
+    formatAttachmentRefs: mockFormat as any,
+    logger: { error: mockLoggerError as any },
+    _mocks: {
+      getAgentCwd: mockGetAgentCwd,
+      send: mockSend,
+      download: mockDownload,
+      format: mockFormat,
+    },
+  };
+}
+
+// Allow async queue processing to settle
+const settle = () => new Promise((r) => setTimeout(r, 50));
+
+// --- Tests ---
+
+test('queue calls downloadAttachments when message has attachments', async () => {
+  const deps = createMockDeps();
+  const attachmentData = [
+    { originalName: 'file.txt', savedPath: '/home/agent/.maestro/discord-files/123-file.txt' },
+  ];
+  deps._mocks.download.mock.mockImplementation(async () => attachmentData);
+  deps._mocks.format.mock.mockImplementation(
+    () => '[Attached: /home/agent/.maestro/discord-files/123-file.txt]',
+  );
+
+  const { enqueue } = createQueue(deps);
+  const msg = makeMessage({
+    content: 'check this file',
+    attachments: {
+      size: 1,
+      values: () => [{ url: 'https://cdn.example.com/file.txt', name: 'file.txt', size: 100 }],
+    },
+  });
+
+  enqueue(msg);
+  await settle();
+
+  // downloadAttachments should have been called
+  assert.equal(deps._mocks.download.mock.callCount(), 1);
+  assert.equal(deps._mocks.getAgentCwd.mock.callCount(), 1);
+  assert.equal(deps._mocks.getAgentCwd.mock.calls[0].arguments[0], 'agent-1');
+
+  // formatAttachmentRefs should have been called with the downloaded files
+  assert.equal(deps._mocks.format.mock.callCount(), 1);
+
+  // maestro.send should receive the combined message
+  assert.equal(deps._mocks.send.mock.callCount(), 1);
+  const sentMessage = deps._mocks.send.mock.calls[0].arguments[1];
+  assert.equal(
+    sentMessage,
+    'check this file\n\n[Attached: /home/agent/.maestro/discord-files/123-file.txt]',
+  );
+});
+
+test('queue does not call downloadAttachments when message has no attachments', async () => {
+  const deps = createMockDeps();
+  const { enqueue } = createQueue(deps);
+
+  enqueue(makeMessage({ content: 'just text', attachments: { size: 0, values: () => [] } }));
+  await settle();
+
+  assert.equal(deps._mocks.download.mock.callCount(), 0);
+  assert.equal(deps._mocks.getAgentCwd.mock.callCount(), 0);
+
+  // maestro.send should receive only the text content
+  assert.equal(deps._mocks.send.mock.callCount(), 1);
+  assert.equal(deps._mocks.send.mock.calls[0].arguments[1], 'just text');
+});
+
+test('queue sends only attachment refs when message content is empty', async () => {
+  const deps = createMockDeps();
+  deps._mocks.download.mock.mockImplementation(async () => [
+    { originalName: 'img.png', savedPath: '/home/agent/.maestro/discord-files/456-img.png' },
+  ]);
+  deps._mocks.format.mock.mockImplementation(
+    () => '[Attached: /home/agent/.maestro/discord-files/456-img.png]',
+  );
+
+  const { enqueue } = createQueue(deps);
+  enqueue(
+    makeMessage({
+      content: '',
+      attachments: {
+        size: 1,
+        values: () => [{ url: 'https://cdn.example.com/img.png', name: 'img.png', size: 200 }],
+      },
+    }),
+  );
+  await settle();
+
+  assert.equal(deps._mocks.send.mock.callCount(), 1);
+  const sentMessage = deps._mocks.send.mock.calls[0].arguments[1];
+  assert.equal(sentMessage, '[Attached: /home/agent/.maestro/discord-files/456-img.png]');
+});
+
+test('queue warns when agent cwd cannot be resolved for attachments', async () => {
+  const deps = createMockDeps();
+  deps._mocks.getAgentCwd.mock.mockImplementation(async () => null);
+
+  const { enqueue } = createQueue(deps);
+  const msg = makeMessage({
+    content: 'here is a file',
+    attachments: {
+      size: 1,
+      values: () => [{ url: 'https://cdn.example.com/file.txt', name: 'file.txt', size: 100 }],
+    },
+  });
+
+  enqueue(msg);
+  await settle();
+
+  // downloadAttachments should NOT be called if cwd is null
+  assert.equal(deps._mocks.download.mock.callCount(), 0);
+
+  // Channel should receive a warning message
+  const sendCalls = msg.channel.send.mock.calls;
+  const warningCall = sendCalls.find(
+    (c: { arguments: unknown[] }) =>
+      typeof c.arguments[0] === 'string' &&
+      c.arguments[0].includes('Could not resolve agent working directory'),
+  );
+  assert.ok(warningCall, 'Expected a warning about unresolved agent cwd');
+});
