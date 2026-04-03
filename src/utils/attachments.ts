@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'fs/promises';
+import { access, mkdir, rm, writeFile } from 'fs/promises';
 import path from 'path';
 import type { Collection, Attachment } from 'discord.js';
 
@@ -52,6 +52,20 @@ export async function downloadAttachments(
   }
 
   return results;
+}
+
+/**
+ * Remove the `.maestro/discord-files/` directory for an agent.
+ * Silently succeeds if the directory doesn't exist.
+ */
+export async function cleanupAgentFiles(agentCwd: string): Promise<void> {
+  const dir = path.join(agentCwd, FILES_DIR);
+  try {
+    await access(dir);
+    await rm(dir, { recursive: true, force: true });
+  } catch {
+    // Directory doesn't exist or can't be removed — nothing to do
+  }
 }
 
 /**
