@@ -35,6 +35,7 @@ for (let i = 0; i < args.length; i++) {
     case '--help':
       printUsage();
       process.exit(0);
+      break;
     default:
       console.error(`Unknown flag: ${args[i]}`);
       process.exit(1);

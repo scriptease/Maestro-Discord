@@ -23,4 +23,5 @@ export const config = {
   guildId: required('DISCORD_GUILD_ID'),
   allowedUserIds: requiredCsv('DISCORD_ALLOWED_USER_IDS'),
   apiPort: parseInt(process.env.API_PORT || '3457', 10),
+  mentionUserId: process.env.DISCORD_MENTION_USER_ID || '',
 };
