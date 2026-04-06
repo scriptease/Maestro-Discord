@@ -1,4 +1,5 @@
 import { access, mkdir, rm, writeFile } from 'fs/promises';
+import { randomUUID } from 'crypto';
 import path from 'path';
 import type { Collection, Attachment } from 'discord.js';
 
@@ -14,24 +15,36 @@ export const FILES_DIR = '.maestro/discord-files';
  * Download Discord attachments to the agent's working directory.
  * Returns an array of successfully downloaded files (never throws).
  */
+export interface DownloadResult {
+  downloaded: DownloadedFile[];
+  failed: string[]; // original names of files that failed
+}
+
 export async function downloadAttachments(
   attachments: Collection<string, Attachment>,
   agentCwd: string,
-): Promise<DownloadedFile[]> {
+): Promise<DownloadResult> {
   const targetDir = path.join(agentCwd, FILES_DIR);
-  await mkdir(targetDir, { recursive: true });
+  try {
+    await mkdir(targetDir, { recursive: true });
+  } catch (err) {
+    console.warn(`[attachments] Failed to create directory "${targetDir}":`, err);
+    return { downloaded: [], failed: [...attachments.values()].map(a => a.name) };
+  }
 
-  const results: DownloadedFile[] = [];
+  const downloaded: DownloadedFile[] = [];
+  const failed: string[] = [];
 
   for (const [, attachment] of attachments) {
     if (attachment.size > MAX_FILE_SIZE) {
       console.warn(
         `[attachments] Skipping "${attachment.name}" (${attachment.size} bytes) — exceeds ${MAX_FILE_SIZE} byte limit`,
       );
+      failed.push(attachment.name);
       continue;
     }
 
-    const filename = `${Date.now()}-${attachment.name}`;
+    const filename = `${randomUUID()}-${attachment.name}`;
     const savedPath = path.join(targetDir, filename);
 
     try {
@@ -40,18 +53,20 @@ export async function downloadAttachments(
         console.warn(
           `[attachments] Failed to download "${attachment.name}": HTTP ${response.status}`,
         );
+        failed.push(attachment.name);
         continue;
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
       await writeFile(savedPath, buffer);
-      results.push({ originalName: attachment.name, savedPath });
+      downloaded.push({ originalName: attachment.name, savedPath });
     } catch (err) {
       console.warn(`[attachments] Error downloading "${attachment.name}":`, err);
+      failed.push(attachment.name);
     }
   }
 
-  return results;
+  return { downloaded, failed };
 }
 
 /**

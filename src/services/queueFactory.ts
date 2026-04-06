@@ -29,7 +29,7 @@ export type QueueDeps = {
     updateSession: (threadId: string, sessionId: string) => void;
   };
   splitMessage: (text: string) => string[];
-  downloadAttachments: (attachments: Message['attachments'], agentCwd: string) => Promise<{ originalName: string; savedPath: string }[]>;
+  downloadAttachments: (attachments: Message['attachments'], agentCwd: string) => Promise<{ downloaded: { originalName: string; savedPath: string }[]; failed: string[] }>;
   formatAttachmentRefs: (files: { originalName: string; savedPath: string }[]) => string;
   logger: { error: (...args: any[]) => any };
 };
@@ -93,15 +93,18 @@ export function createQueue(deps: QueueDeps) {
         try {
           const agentCwd = await deps.maestro.getAgentCwd(agentId);
           if (agentCwd) {
-            const downloaded = await deps.downloadAttachments(message.attachments, agentCwd);
-            attachmentRefs = deps.formatAttachmentRefs(downloaded);
+            const result = await deps.downloadAttachments(message.attachments, agentCwd);
+            attachmentRefs = deps.formatAttachmentRefs(result.downloaded);
+            if (result.failed.length > 0) {
+              await channel.send(`⚠️ Failed to download: ${result.failed.join(', ')}. Sending message without those files.`);
+            }
           } else {
             await channel.send('⚠️ Could not resolve agent working directory for file downloads.');
           }
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           void deps.logger.error('queue:attachment-download', `agent=${agentId} channel=${channelId} error=${errMsg}`);
-          await channel.send('⚠️ Failed to download one or more attachments. Sending message without them.');
+          await channel.send('⚠️ Failed to download attachments. Sending message without them.');
         }
       }
 

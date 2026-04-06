@@ -12,6 +12,7 @@ import {
   MAX_FILE_SIZE,
   FILES_DIR,
   DownloadedFile,
+  DownloadResult,
 } from '../utils/attachments';
 
 // --- Helpers ---
@@ -69,50 +70,54 @@ afterEach(async () => {
 test('downloadAttachments creates .maestro/discord-files/ directory', async () => {
   globalThis.fetch = () => Promise.resolve(okResponse('content'));
 
-  await downloadAttachments(
+  const result = await downloadAttachments(
     makeCollection(makeAttachment({ name: 'test.txt', url: 'https://cdn.example.com/test.txt', size: 100 })),
     tmpDir,
   );
 
   const dirStat = await stat(path.join(tmpDir, FILES_DIR));
   assert.ok(dirStat.isDirectory());
+  assert.equal(result.downloaded.length, 1);
+  assert.deepEqual(result.failed, []);
 });
 
-test('downloadAttachments saves files with timestamp-prefixed names', async () => {
+test('downloadAttachments saves files with UUID-prefixed names', async () => {
   globalThis.fetch = () => Promise.resolve(okResponse('file content'));
 
-  const results = await downloadAttachments(
+  const { downloaded, failed } = await downloadAttachments(
     makeCollection(makeAttachment({ name: 'photo.png', url: 'https://cdn.example.com/photo.png', size: 500 })),
     tmpDir,
   );
 
-  assert.equal(results.length, 1);
-  assert.equal(results[0].originalName, 'photo.png');
-  assert.ok(results[0].savedPath.includes(FILES_DIR));
+  assert.equal(downloaded.length, 1);
+  assert.deepEqual(failed, []);
+  assert.equal(downloaded[0].originalName, 'photo.png');
+  assert.ok(downloaded[0].savedPath.includes(FILES_DIR));
 
-  // Filename should be {timestamp}-photo.png
-  const basename = path.basename(results[0].savedPath);
-  assert.match(basename, /^\d+-photo\.png$/);
+  // Filename should be {uuid}-photo.png
+  const basename = path.basename(downloaded[0].savedPath);
+  assert.match(basename, /^[0-9a-f-]{36}-photo\.png$/);
 
   // File should contain the expected content
-  const content = await readFile(results[0].savedPath, 'utf-8');
+  const content = await readFile(downloaded[0].savedPath, 'utf-8');
   assert.equal(content, 'file content');
 });
 
-test('downloadAttachments skips oversized attachments without throwing', async () => {
+test('downloadAttachments skips oversized attachments and reports them as failed', async () => {
   globalThis.fetch = () => {
     throw new Error('fetch should not be called for oversized files');
   };
 
-  const results = await downloadAttachments(
+  const { downloaded, failed } = await downloadAttachments(
     makeCollection(makeAttachment({ name: 'huge.bin', url: 'https://cdn.example.com/huge.bin', size: MAX_FILE_SIZE + 1 })),
     tmpDir,
   );
 
-  assert.equal(results.length, 0);
+  assert.equal(downloaded.length, 0);
+  assert.deepEqual(failed, ['huge.bin']);
 });
 
-test('downloadAttachments skips failed fetches and continues', async () => {
+test('downloadAttachments skips failed fetches, reports them, and continues', async () => {
   let callCount = 0;
   globalThis.fetch = () => {
     callCount++;
@@ -120,7 +125,7 @@ test('downloadAttachments skips failed fetches and continues', async () => {
     return Promise.resolve(okResponse('second file'));
   };
 
-  const results = await downloadAttachments(
+  const { downloaded, failed } = await downloadAttachments(
     makeCollection(
       makeAttachment({ name: 'missing.txt', url: 'https://cdn.example.com/missing.txt', size: 100 }),
       makeAttachment({ name: 'ok.txt', url: 'https://cdn.example.com/ok.txt', size: 100 }),
@@ -128,13 +133,14 @@ test('downloadAttachments skips failed fetches and continues', async () => {
     tmpDir,
   );
 
-  assert.equal(results.length, 1);
-  assert.equal(results[0].originalName, 'ok.txt');
+  assert.equal(downloaded.length, 1);
+  assert.equal(downloaded[0].originalName, 'ok.txt');
+  assert.deepEqual(failed, ['missing.txt']);
 });
 
-test('downloadAttachments returns empty array for empty collection', async () => {
-  const results = await downloadAttachments(makeCollection(), tmpDir);
-  assert.deepEqual(results, []);
+test('downloadAttachments returns empty result for empty collection', async () => {
+  const result = await downloadAttachments(makeCollection(), tmpDir);
+  assert.deepEqual(result, { downloaded: [], failed: [] });
 });
 
 test('formatAttachmentRefs produces correct format', () => {
@@ -168,4 +174,43 @@ test('cleanupAgentFiles removes the discord-files directory', async () => {
 test('cleanupAgentFiles does not throw if directory does not exist', async () => {
   // tmpDir exists but has no .maestro/discord-files/ subdirectory
   await assert.doesNotReject(() => cleanupAgentFiles(tmpDir));
+});
+
+test('downloadAttachments reports all files as failed when mkdir fails', async () => {
+  // Use an invalid path that cannot be created
+  const invalidCwd = '/dev/null/impossible';
+
+  const { downloaded, failed } = await downloadAttachments(
+    makeCollection(
+      makeAttachment({ name: 'a.txt', url: 'https://cdn.example.com/a.txt', size: 100 }),
+      makeAttachment({ name: 'b.txt', url: 'https://cdn.example.com/b.txt', size: 100 }),
+    ),
+    invalidCwd,
+  );
+
+  assert.equal(downloaded.length, 0);
+  assert.deepEqual(failed, ['a.txt', 'b.txt']);
+});
+
+test('downloadAttachments handles partial failures — downloads successes and reports failures', async () => {
+  let callCount = 0;
+  globalThis.fetch = () => {
+    callCount++;
+    if (callCount === 2) return Promise.reject(new Error('network error'));
+    return Promise.resolve(okResponse(`content-${callCount}`));
+  };
+
+  const { downloaded, failed } = await downloadAttachments(
+    makeCollection(
+      makeAttachment({ name: 'first.txt', url: 'https://cdn.example.com/first.txt', size: 100 }),
+      makeAttachment({ name: 'broken.txt', url: 'https://cdn.example.com/broken.txt', size: 100 }),
+      makeAttachment({ name: 'third.txt', url: 'https://cdn.example.com/third.txt', size: 100 }),
+    ),
+    tmpDir,
+  );
+
+  assert.equal(downloaded.length, 2);
+  assert.equal(downloaded[0].originalName, 'first.txt');
+  assert.equal(downloaded[1].originalName, 'third.txt');
+  assert.deepEqual(failed, ['broken.txt']);
 });

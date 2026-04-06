@@ -18,7 +18,7 @@ function makeMessage(overrides: Partial<Record<string, unknown>> = {}) {
   } as unknown;
 }
 
-function createDeps(enqueue: () => void) {
+function createDeps(enqueue: (...args: any[]) => void) {
   return {
     channelDb: { get: () => ({ agent_id: 'agent-1' }) as any },
     threadDb: {
@@ -182,6 +182,63 @@ test('handleMessageCreate creates and registers a thread when mention metadata i
   );
 
   assert.deepEqual(registerCalls, [['thread-new-2', 'channel-1', 'agent-1', 'user-42']]);
+});
+
+test('handleMessageCreate forwards attachments as AttachmentPayload objects in mention-triggered threads', async () => {
+  let enqueued = 0;
+  let enqueuedMessage: any = null;
+  const deps = createDeps((msg: any) => { enqueued += 1; enqueuedMessage = msg; });
+  deps.threadDb.register = () => undefined;
+
+  const handler = createMessageCreateHandler(deps as any);
+  await handler(
+    makeMessage({
+      content: 'check this <@bot-1>',
+      attachments: {
+        size: 1,
+        values: () => [
+          { url: 'https://cdn.discord.com/file.png', name: 'file.png', size: 500 },
+        ],
+      },
+      channel: {
+        id: 'channel-1',
+        isThread: () => false,
+        threads: {
+          create: async () => ({
+            id: 'thread-att-1',
+            send: async (msg: string | { content?: string; files?: unknown[] }) => {
+              if (typeof msg !== 'string' && msg.files) {
+                // Verify files are sent as AttachmentPayload objects, not bare URLs
+                assert.ok(Array.isArray(msg.files));
+                for (const f of msg.files) {
+                  assert.ok(typeof f === 'object' && f !== null);
+                  assert.ok('attachment' in (f as any), 'file should have attachment property');
+                  assert.ok('name' in (f as any), 'file should have name property');
+                }
+              }
+              return {
+                id: 'msg-att-forwarded',
+                content: typeof msg === 'string' ? msg : (msg.content ?? ''),
+                // Simulate discord.js: when sent with AttachmentPayload, the
+                // returned message should have real attachments
+                attachments: {
+                  size: 1,
+                  values: () => [
+                    { url: 'https://cdn.discord.com/reupload/file.png', name: 'file.png', size: 500 },
+                  ],
+                },
+              };
+            },
+          }),
+        },
+      },
+    }) as any
+  );
+
+  assert.equal(enqueued, 1);
+  // The enqueued message should have real attachments (not size 0)
+  assert.ok(enqueuedMessage);
+  assert.equal(enqueuedMessage.attachments.size, 1);
 });
 
 test('handleMessageCreate ignores non-thread channel messages without bot mention', async () => {

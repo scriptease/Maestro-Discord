@@ -111,4 +111,13 @@ export const threadDb = {
   remove(threadId: string): void {
     db.prepare('DELETE FROM agent_threads WHERE thread_id = ?').run(threadId);
   },
+
+  getByAgentId(agentId: string): AgentThread[] {
+    return db.prepare('SELECT * FROM agent_threads WHERE agent_id = ?')
+      .all(agentId) as AgentThread[];
+  },
+
+  removeByChannel(channelId: string): void {
+    db.prepare('DELETE FROM agent_threads WHERE channel_id = ?').run(channelId);
+  },
 };

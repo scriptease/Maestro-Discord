@@ -7,7 +7,7 @@ import {
   TextChannel,
 } from 'discord.js';
 import { maestro } from '../services/maestro';
-import { channelDb } from '../db';
+import { channelDb, threadDb } from '../db';
 import { cleanupAgentFiles } from '../utils/attachments';
 
 export const data = new SlashCommandBuilder()
@@ -199,12 +199,16 @@ async function handleDisconnect(interaction: ChatInputCommandInteraction): Promi
   await interaction.reply({ content: `Disconnecting **${channelInfo.agent_name}**...`, ephemeral: true });
 
   // Clean up downloaded files if this is the last channel for this agent
+  // (also consider threads bound to other channels for the same agent)
   const agentId = channelInfo.agent_id;
   const otherChannels = channelDb.getByAgentId(agentId).filter(
     (c) => c.channel_id !== interaction.channelId,
   );
+  const otherThreads = threadDb.getByAgentId(agentId).filter(
+    (t) => t.channel_id !== interaction.channelId,
+  );
 
-  if (otherChannels.length === 0) {
+  if (otherChannels.length === 0 && otherThreads.length === 0) {
     try {
       const agentCwd = await maestro.getAgentCwd(agentId);
       if (agentCwd) {
@@ -215,9 +219,11 @@ async function handleDisconnect(interaction: ChatInputCommandInteraction): Promi
       console.warn(`[disconnect] Failed to clean up files for agent ${agentId}:`, err);
     }
   } else {
-    console.log(`[disconnect] Skipping file cleanup for agent ${agentId} — ${otherChannels.length} other channel(s) still active`);
+    console.log(`[disconnect] Skipping file cleanup for agent ${agentId} — ${otherChannels.length} other channel(s) and ${otherThreads.length} other thread(s) still active`);
   }
 
+  // Remove channel and its threads from DB
+  threadDb.removeByChannel(interaction.channelId);
   channelDb.remove(interaction.channelId);
 
   setTimeout(async () => {

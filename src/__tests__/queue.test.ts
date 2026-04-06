@@ -32,7 +32,7 @@ function defaultSendResult(extra: Record<string, unknown> = {}) {
 function createMockDeps(): QueueDeps & { _mocks: Record<string, ReturnType<typeof mock.fn>> } {
   const mockGetAgentCwd = mock.fn(async () => '/home/agent' as string | null);
   const mockSend = mock.fn(async () => defaultSendResult());
-  const mockDownload = mock.fn(async () => [] as { originalName: string; savedPath: string }[]);
+  const mockDownload = mock.fn(async () => ({ downloaded: [] as { originalName: string; savedPath: string }[], failed: [] as string[] }));
   const mockFormat = mock.fn(() => '');
   const mockLoggerError = mock.fn();
   const mockChannelGet = mock.fn(() => ({
@@ -71,9 +71,12 @@ const settle = () => new Promise((r) => setTimeout(r, 50));
 
 test('queue calls downloadAttachments when message has attachments', async () => {
   const deps = createMockDeps();
-  const attachmentData = [
-    { originalName: 'file.txt', savedPath: '/home/agent/.maestro/discord-files/123-file.txt' },
-  ];
+  const attachmentData = {
+    downloaded: [
+      { originalName: 'file.txt', savedPath: '/home/agent/.maestro/discord-files/123-file.txt' },
+    ],
+    failed: [],
+  };
   deps._mocks.download.mock.mockImplementation(async () => attachmentData);
   deps._mocks.format.mock.mockImplementation(
     () => '[Attached: /home/agent/.maestro/discord-files/123-file.txt]',
@@ -125,9 +128,12 @@ test('queue does not call downloadAttachments when message has no attachments', 
 
 test('queue sends only attachment refs when message content is empty', async () => {
   const deps = createMockDeps();
-  deps._mocks.download.mock.mockImplementation(async () => [
-    { originalName: 'img.png', savedPath: '/home/agent/.maestro/discord-files/456-img.png' },
-  ]);
+  deps._mocks.download.mock.mockImplementation(async () => ({
+    downloaded: [
+      { originalName: 'img.png', savedPath: '/home/agent/.maestro/discord-files/456-img.png' },
+    ],
+    failed: [],
+  }));
   deps._mocks.format.mock.mockImplementation(
     () => '[Attached: /home/agent/.maestro/discord-files/456-img.png]',
   );
@@ -178,13 +184,57 @@ test('queue handles attachment download failure gracefully', async () => {
   const warningCall = sendCalls.find(
     (c: { arguments: unknown[] }) =>
       typeof c.arguments[0] === 'string' &&
-      c.arguments[0].includes('Failed to download one or more attachments'),
+      c.arguments[0].includes('Failed to download attachments'),
   );
   assert.ok(warningCall, 'Expected a warning about failed downloads');
 
   // Should still send the message text to the agent (without attachment refs)
   assert.equal(deps._mocks.send.mock.callCount(), 1);
   assert.equal(deps._mocks.send.mock.calls[0].arguments[1], 'check this file');
+});
+
+test('queue shows specific file names when some downloads fail', async () => {
+  const deps = createMockDeps();
+  deps._mocks.download.mock.mockImplementation(async () => ({
+    downloaded: [
+      { originalName: 'ok.txt', savedPath: '/home/agent/.maestro/discord-files/ok.txt' },
+    ],
+    failed: ['broken.png', 'huge.bin'],
+  }));
+  deps._mocks.format.mock.mockImplementation(
+    () => '[Attached: /home/agent/.maestro/discord-files/ok.txt]',
+  );
+
+  const { enqueue } = createQueue(deps);
+  const msg = makeMessage({
+    content: 'files here',
+    attachments: {
+      size: 3,
+      values: () => [
+        { url: 'u1', name: 'ok.txt', size: 100 },
+        { url: 'u2', name: 'broken.png', size: 100 },
+        { url: 'u3', name: 'huge.bin', size: 100 },
+      ],
+    },
+  });
+
+  enqueue(msg);
+  await settle();
+
+  // Should warn about the specific failed files
+  const sendCalls = msg.channel.send.mock.calls;
+  const warningCall = sendCalls.find(
+    (c: { arguments: unknown[] }) =>
+      typeof c.arguments[0] === 'string' &&
+      c.arguments[0].includes('broken.png') &&
+      c.arguments[0].includes('huge.bin'),
+  );
+  assert.ok(warningCall, 'Expected a warning naming the failed files');
+
+  // Should still send the message with the successful attachment ref
+  assert.equal(deps._mocks.send.mock.callCount(), 1);
+  const sentMessage = deps._mocks.send.mock.calls[0].arguments[1];
+  assert.ok((sentMessage as string).includes('[Attached:'));
 });
 
 test('queue warns when agent cwd cannot be resolved for attachments', async () => {

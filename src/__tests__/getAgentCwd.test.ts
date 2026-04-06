@@ -49,3 +49,28 @@ test('getAgentCwd refreshes cache after TTL expires', async () => {
   await maestro.getAgentCwd('agent-2');
   assert.equal(listAgentsMock.mock.callCount(), 2);
 });
+
+test('getAgentCwd propagates errors from listAgents', async () => {
+  mock.method(maestro, 'listAgents', async () => {
+    throw new Error('CLI not found');
+  });
+
+  await assert.rejects(() => maestro.getAgentCwd('agent-1'), { message: 'CLI not found' });
+});
+
+test('getAgentCwd retries after a failed listAgents call', async () => {
+  let callCount = 0;
+  mock.method(maestro, 'listAgents', async () => {
+    callCount++;
+    if (callCount === 1) throw new Error('transient failure');
+    return fakeAgents;
+  });
+
+  // First call fails
+  await assert.rejects(() => maestro.getAgentCwd('agent-1'), { message: 'transient failure' });
+
+  // Cache was not set, so next call should retry listAgents
+  const cwd = await maestro.getAgentCwd('agent-1');
+  assert.equal(cwd, '/home/user/project-a');
+  assert.equal(callCount, 2);
+});

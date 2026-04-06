@@ -69,9 +69,15 @@ export function createMessageCreateHandler(deps: MessageCreateDeps) {
           : new RegExp(`<@!?${botUserId}>`, 'g');
         const cleanContent = message.content.replace(mentionPattern, '').trim();
         if (cleanContent || message.attachments.size > 0) {
+          // Re-upload attachments so the thread message has real discord.js
+          // Attachment objects (sending bare URLs produces attachments.size===0).
+          const files = [...message.attachments.values()].map(a => ({
+            attachment: a.url,
+            name: a.name,
+          }));
           const threadMessage = await thread.send({
             content: cleanContent || undefined,
-            files: [...message.attachments.values()].map(a => a.url),
+            files: files.length > 0 ? files : undefined,
           });
           deps.enqueue(threadMessage);
         }
