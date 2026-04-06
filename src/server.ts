@@ -67,6 +67,7 @@ function sendJson(res: http.ServerResponse, status: number, data: object) {
 
 export function createServerHandler(client: Client, deps: ServerDeps) {
   const pendingChannels = new Map<string, Promise<AgentChannelRecord>>();
+  let pendingCategory: Promise<any> | null = null;
 
   async function findOrCreateChannel(agentId: string): Promise<AgentChannelRecord> {
     const existing = deps.channelDb.getByAgentId(agentId);
@@ -83,22 +84,29 @@ export function createServerHandler(client: Client, deps: ServerDeps) {
 
       const guild = await client.guilds.fetch(deps.config.guildId);
 
-      // Find or create "Maestro Agents" category
+      // Find or create "Maestro Agents" category (deduplicated across concurrent requests)
       let category = guild.channels.cache.find(
         (c) => c.type === ChannelType.GuildCategory && c.name === 'Maestro Agents'
       );
       if (!category) {
-        category = await guild.channels.create({
-          name: 'Maestro Agents',
-          type: ChannelType.GuildCategory,
-        });
+        if (!pendingCategory) {
+          pendingCategory = guild.channels.create({
+            name: 'Maestro Agents',
+            type: ChannelType.GuildCategory,
+          });
+        }
+        try {
+          category = await pendingCategory;
+        } finally {
+          pendingCategory = null;
+        }
       }
 
       const channelName = `agent-${agent.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
       const channel = (await guild.channels.create({
         name: channelName,
         type: ChannelType.GuildText,
-        parent: category.id,
+        parent: category!.id,
         topic: `Maestro agent: ${agent.name} (${agent.id}) | ${agent.toolType} | ${agent.cwd}`,
       })) as TextChannel;
 
