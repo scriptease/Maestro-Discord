@@ -1,5 +1,5 @@
 import http from 'http';
-import { Client, ChannelType, TextChannel } from 'discord.js';
+import { Client, ChannelType, CategoryChannel, SendableChannels } from 'discord.js';
 
 export interface AgentChannelRecord {
   channel_id: string;
@@ -67,7 +67,7 @@ function sendJson(res: http.ServerResponse, status: number, data: object) {
 
 export function createServerHandler(client: Client, deps: ServerDeps) {
   const pendingChannels = new Map<string, Promise<AgentChannelRecord>>();
-  let pendingCategory: Promise<any> | null = null;
+  let pendingCategory: Promise<CategoryChannel> | null = null;
 
   async function findOrCreateChannel(agentId: string): Promise<AgentChannelRecord> {
     const existing = deps.channelDb.getByAgentId(agentId);
@@ -108,7 +108,7 @@ export function createServerHandler(client: Client, deps: ServerDeps) {
         type: ChannelType.GuildText,
         parent: category!.id,
         topic: `Maestro agent: ${agent.name} (${agent.id}) | ${agent.toolType} | ${agent.cwd}`,
-      })) as TextChannel;
+      }));
 
       deps.channelDb.register(channel.id, guild.id, agent.id, agent.name);
 
@@ -179,13 +179,13 @@ export function createServerHandler(client: Client, deps: ServerDeps) {
     }
 
     // Fetch Discord channel
-    let channel: TextChannel;
+    let channel: SendableChannels;
     try {
       const fetched = await client.channels.fetch(record.channel_id);
       if (!fetched?.isSendable()) {
         throw new Error(`Configured channel ${record.channel_id} is missing or not sendable`);
       }
-      channel = fetched as TextChannel;
+      channel = fetched;
     } catch (err) {
       const msg = `Failed to fetch channel ${record.channel_id}: ${(err as Error).message}`;
       await deps.logger.error('server/fetchChannel', msg);
@@ -289,6 +289,15 @@ export function startServer(client: Client): http.Server {
   });
 
   const server = http.createServer(handler);
+
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`API server failed to start: port ${config.apiPort} is already in use`);
+    } else {
+      console.error('API server error:', err.message);
+    }
+    process.exit(1);
+  });
 
   server.listen(config.apiPort, '127.0.0.1', () => {
     console.log(`API server listening on http://127.0.0.1:${config.apiPort}`);
