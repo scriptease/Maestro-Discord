@@ -176,15 +176,16 @@ test('cleanupAgentFiles does not throw if directory does not exist', async () =>
 });
 
 test('downloadAttachments reports all files as failed when mkdir fails', async () => {
-  // Use an invalid path that cannot be created
-  const invalidCwd = '/dev/null/impossible';
+  // Use a file path as cwd so mkdir(<file>/...) fails deterministically
+  const fileAsCwd = path.join(tmpDir, 'not-a-directory');
+  await writeFile(fileAsCwd, 'x');
 
   const { downloaded, failed } = await downloadAttachments(
     makeCollection(
       makeAttachment({ name: 'a.txt', url: 'https://cdn.example.com/a.txt', size: 100 }),
       makeAttachment({ name: 'b.txt', url: 'https://cdn.example.com/b.txt', size: 100 }),
     ),
-    invalidCwd,
+    fileAsCwd,
   );
 
   assert.equal(downloaded.length, 0);
