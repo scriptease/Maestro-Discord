@@ -24,6 +24,7 @@ function makeClient(overrides: Record<string, unknown> = {}) {
     channels: {
       fetch: async (id: string) => ({
         id,
+        isSendable: () => true,
         send: async () => ({}),
         members: { filter: () => ({ size: 0, map: () => [] }) },
       }),
@@ -171,6 +172,7 @@ test('POST /api/send returns 200 on success', async () => {
   const client = makeClient({
     channels: {
       fetch: async () => ({
+        isSendable: () => true,
         send: async (msg: string) => { sentMessages.push(msg); },
       }),
     },
@@ -192,6 +194,7 @@ test('POST /api/send prepends mention when mention=true and mentionUserId is set
   const client = makeClient({
     channels: {
       fetch: async () => ({
+        isSendable: () => true,
         send: async (msg: string) => { sentMessages.push(msg); },
       }),
     },
@@ -212,6 +215,7 @@ test('POST /api/send does not mention when mentionUserId is empty', async () => 
   const client = makeClient({
     channels: {
       fetch: async () => ({
+        isSendable: () => true,
         send: async (msg: string) => { sentMessages.push(msg); },
       }),
     },

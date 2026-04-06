@@ -135,12 +135,22 @@ export function createServerHandler(client: Client, deps: ServerDeps) {
     try {
       body = await parseBody(req);
     } catch (err) {
-      sendJson(res, 400, { success: false, error: (err as Error).message });
+      const message = (err as Error).message;
+      const status = message === 'Request body too large' ? 413 : 400;
+      sendJson(res, status, { success: false, error: message });
       return;
     }
 
     // Validate required fields
-    if (!body.agentId || typeof body.agentId !== 'string' || !body.message || typeof body.message !== 'string') {
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      Array.isArray(body) ||
+      typeof body.agentId !== 'string' ||
+      body.agentId.trim() === '' ||
+      typeof body.message !== 'string' ||
+      body.message.trim() === ''
+    ) {
       sendJson(res, 400, { success: false, error: 'agentId and message are required non-empty strings' });
       return;
     }
@@ -164,6 +174,9 @@ export function createServerHandler(client: Client, deps: ServerDeps) {
     let channel: TextChannel;
     try {
       const fetched = await client.channels.fetch(record.channel_id);
+      if (!fetched?.isSendable()) {
+        throw new Error(`Configured channel ${record.channel_id} is missing or not sendable`);
+      }
       channel = fetched as TextChannel;
     } catch (err) {
       const msg = `Failed to fetch channel ${record.channel_id}: ${(err as Error).message}`;
