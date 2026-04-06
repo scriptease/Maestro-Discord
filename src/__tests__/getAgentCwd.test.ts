@@ -1,6 +1,6 @@
 import test, { afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { maestro, resetAgentCwdCache, AGENT_CWD_CACHE_TTL } from '../services/maestro';
+import { maestro, resetAgentCwdCache } from '../services/maestro';
 import type { MaestroAgent } from '../services/maestro';
 
 const fakeAgents: MaestroAgent[] = [

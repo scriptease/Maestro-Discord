@@ -1,6 +1,6 @@
 import test, { afterEach, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile, stat } from 'fs/promises';
+import { mkdtemp, rm, readFile, stat, mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { Collection } from 'discord.js';
@@ -161,7 +161,6 @@ test('formatAttachmentRefs returns empty string for empty array', () => {
 test('cleanupAgentFiles removes the discord-files directory', async () => {
   // Create the directory structure with a file inside
   const filesDir = path.join(tmpDir, FILES_DIR);
-  const { mkdir, writeFile } = await import('fs/promises');
   await mkdir(filesDir, { recursive: true });
   await writeFile(path.join(filesDir, 'test.txt'), 'content');
 
