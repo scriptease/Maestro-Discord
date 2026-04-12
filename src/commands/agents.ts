@@ -132,7 +132,15 @@ async function handleNew(interaction: ChatInputCommandInteraction): Promise<void
   await interaction.deferReply({ ephemeral: true });
 
   const agentInput = interaction.options.getString('agent', true);
-  const guild = interaction.guild!;
+  const guild =
+    interaction.guild ??
+    (interaction.guildId
+      ? await interaction.client.guilds.fetch(interaction.guildId).catch(() => null)
+      : null);
+  if (!guild) {
+    await interaction.editReply(interaction.guildId ? MISSING_BOT_SCOPE : 'This command must be used in a server.');
+    return;
+  }
 
   const agents = await maestro.listAgents();
   const agent = agents.find(

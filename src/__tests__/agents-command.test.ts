@@ -143,9 +143,8 @@ test('agents new requires a guild', async () => {
 
   await execute(interaction);
 
-  const reply = interaction.editReply.mock.calls[0].arguments[0];
-  assert.ok(typeof reply === 'string');
-  assert.ok(reply.includes('must be used in a server'));
+  const reply = interaction.reply.mock.calls[0].arguments[0];
+  assert.ok(reply.content.includes('must be used in a server'));
 });
 
 test('agents new matches agent by prefix', async () => {
