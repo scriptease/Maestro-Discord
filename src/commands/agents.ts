@@ -201,7 +201,7 @@ async function handleDisconnect(interaction: ChatInputCommandInteraction): Promi
   // Clean up downloaded files if this is the last channel for this agent
   // (also consider threads bound to other channels for the same agent)
   const agentId = channelInfo.agent_id;
-  const otherChannels = channelDb.getByAgentId(agentId).filter(
+  const otherChannels = channelDb.listByAgentId(agentId).filter(
     (c) => c.channel_id !== interaction.channelId,
   );
   const otherThreads = threadDb.getByAgentId(agentId).filter(
