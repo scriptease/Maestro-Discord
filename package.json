@@ -23,7 +23,7 @@
     "dotenv": "^16.0.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.4.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.0.0",
     "ts-node": "^10.0.0",
     "tsx": "^3.12.7",

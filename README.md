@@ -84,6 +84,7 @@ node --test --experimental-test-coverage --import tsx
 | `/agents disconnect` | (Run inside an agent channel) Remove and delete the channel |
 | `/agents readonly on\|off` | Toggle read-only mode for the current agent channel |
 | `/session new` | Create a new owner-bound thread for the current agent channel |
+| `/session list` | List session threads for the current agent channel |
 
 ## How it works
 
