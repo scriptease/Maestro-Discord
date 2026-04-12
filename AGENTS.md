@@ -26,32 +26,9 @@ CLAUDE.md is a symlink to this file.
 - `src/deploy-commands.ts` — registers slash commands with Discord API
 - `bin/maestro-discord.ts` — CLI tool for agent-to-Discord messaging
 
-## HTTP API (src/server.ts)
+## HTTP API
 
-The bot exposes a local HTTP API on `127.0.0.1:API_PORT` (default 3457).
-
-### POST /api/send
-
-Sends a message to an agent's Discord channel (auto-creates if needed).
-
-Request: `Content-Type: application/json`
-```json
-{ "agentId": "string", "message": "string", "mention": false }
-```
-
-Responses:
-- `200` — success: `{ "success": true, "channelId": "..." }`
-- `400` — missing/invalid fields or malformed JSON
-- `404` — agent not found in Maestro
-- `413` — request body exceeds 1 MB
-- `415` — wrong Content-Type (must be application/json)
-- `429` — rate limited by Discord after 3 retries
-- `503` — bot not connected to Discord
-
-### GET /api/health
-
-Returns bot status: `{ "success": true, "status": "ok", "uptime": 123.45 }`
-Returns `503` with `"status": "not_ready"` if the bot is disconnected.
+Local API on `127.0.0.1:API_PORT` (default 3457). See [docs/api.md](docs/api.md) for endpoints, request format, and error codes.
 
 ## Project notes
 

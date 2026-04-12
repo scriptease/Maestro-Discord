@@ -83,61 +83,15 @@ node --test --experimental-test-coverage --import tsx
 | `/agents new <agent-id>` | Create a dedicated channel for an agent |
 | `/agents disconnect` | (Run inside an agent channel) Remove and delete the channel |
 | `/agents readonly on\|off` | Toggle read-only mode for the current agent channel |
+| `/session new` | Create a new owner-bound thread for the current agent channel |
 
 ## How it works
 
-- `/agents list` reads running agents from Maestro.
-- `/agents new` creates a text channel under the **Maestro Agents** category.
-- Mention flow: in a registered agent channel, user mentions the bot (either `@bot` user mention or `@BotRole` role mention) and the bot creates a dedicated thread bound to that user. The triggering message is forwarded to the agent so the user gets an immediate response.
-- Only the bound owner can trigger agent responses inside that thread. Messages from other users are silently ignored.
-- `/session new` also creates an owner-bound thread for the command invoker.
-- Messages in registered, owner-authorized threads are queued and forwarded to `maestro-cli`.
-- The bot adds a ⏳ reaction while waiting, shows typing, and splits long replies.
-- After each response, it posts a small usage footer with tokens, cost, and context.
+Mention the bot in an agent channel to create a thread, then chat — messages are queued and forwarded to the agent via `maestro-cli`. See [docs/architecture.md](docs/architecture.md) for the full message flow, thread ownership model, and project layout.
 
 ## Maestro-to-Discord Messaging
 
-Maestro agents can send messages to Discord using the `maestro-discord` CLI.
-The bot exposes a local HTTP API that the CLI calls.
-
-### Setup
-
-The API server starts automatically with the bot on port 3457 (configurable via `API_PORT` in `.env`).
-
-### Usage
-
-```bash
-# Send a message to an agent's Discord channel
-maestro-discord --agent <agent-id> --message "Hello from Maestro"
-
-# Send with @mention (pings the user set in DISCORD_MENTION_USER_ID)
-maestro-discord --agent <agent-id> --message "Build complete!" --mention
-
-# Use a custom port
-maestro-discord --agent <agent-id> --message "Hello" --port 4000
-```
-
-If the agent doesn't have a connected Discord channel yet, one is created automatically.
-
-### Health check
-
-```bash
-curl http://127.0.0.1:3457/api/health
-```
-
-Returns `{"success":true,"status":"ok","uptime":123.45}` when the bot is connected.
-
-### API error codes
-
-| Status | Meaning |
-|--------|---------|
-| `200` | Success |
-| `400` | Missing/invalid fields or malformed JSON |
-| `404` | Agent not found in Maestro |
-| `413` | Request body exceeds 1 MB |
-| `415` | Wrong Content-Type (must be `application/json`) |
-| `429` | Rate limited by Discord after 3 retries |
-| `503` | Bot not connected to Discord |
+Agents can push messages to Discord via the `maestro-discord` CLI / HTTP API. See [docs/api.md](docs/api.md) for usage, endpoints, and error codes.
 
 ## Data storage
 
