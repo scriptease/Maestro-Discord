@@ -14,11 +14,11 @@ const createdChannels: string[] = [];
 const createdThreads: string[] = [];
 
 afterEach(() => {
-  for (const id of createdChannels) {
-    try { channelDb.remove(id); } catch { /* ignore */ }
-  }
   for (const id of createdThreads) {
     try { threadDb.remove(id); } catch { /* ignore */ }
+  }
+  for (const id of createdChannels) {
+    try { channelDb.remove(id); } catch { /* ignore */ }
   }
   createdChannels.length = 0;
   createdThreads.length = 0;
@@ -94,6 +94,7 @@ test('channelDb.setReadOnly toggles the read_only flag', () => {
 
 test('channelDb.remove deletes the channel', () => {
   const chId = uid('ch');
+  createdChannels.push(chId);
 
   channelDb.register(chId, 'guild-1', 'agent-1', 'Agent');
   assert.ok(channelDb.get(chId));
@@ -205,6 +206,7 @@ test('threadDb.listByChannel returns empty array for unknown channel', () => {
 
 test('threadDb.remove deletes the thread', () => {
   const threadId = uid('thread');
+  createdThreads.push(threadId);
 
   threadDb.register(threadId, 'channel-1', 'agent-1', 'user-1');
   assert.ok(threadDb.get(threadId));
@@ -234,6 +236,7 @@ test('threadDb.removeByChannel deletes all threads for a channel', () => {
   const channelId = uid('ch');
   const t1 = uid('thread');
   const t2 = uid('thread');
+  createdThreads.push(t1, t2);
 
   threadDb.register(t1, channelId, 'agent-1', 'user-1');
   threadDb.register(t2, channelId, 'agent-1', 'user-2');
