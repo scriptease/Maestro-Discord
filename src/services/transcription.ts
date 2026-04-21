@@ -11,12 +11,11 @@ import { logger } from './logger';
 const execAsync = promisify(exec);
 
 function quoteArg(value: string): string {
-  if (/[\r\n]/.test(value)) {
-    throw new Error('Command arguments cannot contain line breaks.');
+  if (/[|&;<>`$'"\r\n]/.test(value)) {
+    throw new Error('Command arguments contain unsupported shell characters.');
   }
   const escaped = value
     .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
     .replace(/\$/g, '\\$')
     .replace(/`/g, '\\`');
   return `"${escaped}"`;

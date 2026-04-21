@@ -133,10 +133,10 @@ export function createMessageCreateHandler(deps: MessageCreateDeps) {
           logWarn('messageCreate: failed to send typing indicator:', err);
         });
 
+      void sendTyping();
       typingRefreshInterval = setInterval(() => {
         void sendTyping();
       }, TYPING_INDICATOR_REFRESH_INTERVAL_MS);
-      void sendTyping();
 
       await message.reply('🎙️ Transcribing voice message...');
 
@@ -151,11 +151,16 @@ export function createMessageCreateHandler(deps: MessageCreateDeps) {
       }
 
       const transcriptionText = transcriptions.join('\n\n');
-      await Promise.allSettled(
+      const replyResults = await Promise.allSettled(
         deps
           .splitMessage(`📝 **Transcription:**\n${transcriptionText}`)
           .map((part) => message.reply(part)),
       );
+      const failedReplies = replyResults.filter((result) => result.status === 'rejected');
+      if (failedReplies.length > 0) {
+        const logWarn = deps.logger?.warn ?? console.warn;
+        logWarn(`messageCreate: failed to send ${failedReplies.length} transcription reply part(s)`);
+      }
 
       const contentOverride = [message.content.trim(), transcriptionText].filter(Boolean).join('\n\n');
       deps.enqueue(message, {
