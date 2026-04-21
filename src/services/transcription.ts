@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import os from 'os';
@@ -8,22 +8,11 @@ import type { Attachment } from 'discord.js';
 import { config } from '../config';
 import { logger } from './logger';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
-function quoteArg(value: string): string {
-  if (/[|&;<>`$'"\r\n]/.test(value)) {
-    throw new Error('Command arguments contain unsupported shell characters.');
-  }
-  const escaped = value
-    .replace(/\\/g, '\\\\')
-    .replace(/\$/g, '\\$')
-    .replace(/`/g, '\\`');
-  return `"${escaped}"`;
-}
-
-async function runCommand(command: string): Promise<void> {
+async function runCommand(executable: string, args: string[]): Promise<void> {
   try {
-    await execAsync(command);
+    await execFileAsync(executable, args);
   } catch (err: unknown) {
     const e = err as { message?: string; stderr?: string; stdout?: string; code?: number | string };
     const detail = [e.code ? `exit code: ${e.code}` : '', e.stderr?.trim(), e.stdout?.trim()]
@@ -38,7 +27,7 @@ async function runCommand(command: string): Promise<void> {
 export function isVoiceAttachment(attachment: Attachment): boolean {
   const contentType = attachment.contentType?.toLowerCase() ?? '';
   const name = attachment.name.toLowerCase();
-  return contentType.startsWith('audio/') || name.endsWith('.ogg');
+  return contentType === 'audio/ogg' || name.endsWith('.ogg');
 }
 
 export async function transcribeVoiceAttachment(attachment: Attachment): Promise<string> {
@@ -50,24 +39,36 @@ export async function transcribeVoiceAttachment(attachment: Attachment): Promise
 
   await mkdir(tempDir, { recursive: true });
   try {
-    const response = await fetch(attachment.url);
+    const response = await fetch(attachment.url, { signal: AbortSignal.timeout(30000) });
     if (!response.ok) {
       throw new Error(`Failed to download voice attachment: HTTP ${response.status}`);
     }
 
     const audioBuffer = Buffer.from(await response.arrayBuffer());
-    if (audioBuffer.subarray(0, 4).toString('ascii') !== 'OggS') {
-      throw new Error('Voice attachment is not a valid OGG file.');
-    }
     await writeFile(inputPath, audioBuffer);
 
-    await runCommand(
-      `${quoteArg(config.ffmpegPath)} -y -i ${quoteArg(inputPath)} -ac 1 -ar 16000 -sample_fmt s16 ${quoteArg(wavPath)}`,
-    );
+    await runCommand(config.ffmpegPath, [
+      '-y',
+      '-i',
+      inputPath,
+      '-ac',
+      '1',
+      '-ar',
+      '16000',
+      '-sample_fmt',
+      's16',
+      wavPath,
+    ]);
 
-    await runCommand(
-      `${quoteArg(config.whisperCliPath)} -m ${quoteArg(config.whisperModelPath)} -f ${quoteArg(wavPath)} -otxt -of ${quoteArg(outputBase)}`,
-    );
+    await runCommand(config.whisperCliPath, [
+      '-m',
+      config.whisperModelPath,
+      '-f',
+      wavPath,
+      '-otxt',
+      '-of',
+      outputBase,
+    ]);
 
 
     const transcription = (await readFile(outputTxtPath, 'utf8')).trim();
@@ -77,10 +78,9 @@ export async function transcribeVoiceAttachment(attachment: Attachment): Promise
       );
     }
     return transcription;
-  } 
-  finally {
-    //await rm(tempDir, { recursive: true, force: true }).catch((err) => {
-    //  logger.error(`Failed to clean up temp transcription files at "${tempDir}":`, err);
-    //});
+  } finally {
+    await rm(tempDir, { recursive: true, force: true }).catch((err) => {
+      logger.error(`Failed to clean up temp transcription files at "${tempDir}":`, err);
+    });
   }
 }

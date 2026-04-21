@@ -78,7 +78,7 @@ API_PORT=3457                     # Optional: port for internal API (default 345
 DISCORD_MENTION_USER_ID=          # Optional: Discord user ID to @mention when --mention is used
 FFMPEG_PATH=/opt/homebrew/bin/ffmpeg                # Optional: path to ffmpeg binary
 WHISPER_CLI_PATH=/opt/homebrew/bin/whisper-cli      # Optional: path to whisper-cli binary
-WHISPER_MODEL_PATH=./models/ggml-small.en.bin       # Optional: path to whisper.cpp model
+WHISPER_MODEL_PATH=models/ggml-base.en.bin          # Optional: path to whisper.cpp model
 ```
 
 ### Voice Transcription Setup
@@ -91,28 +91,20 @@ To enable voice message transcription, you need [ffmpeg](https://ffmpeg.org/) an
 brew install ffmpeg whisper-cli
 ```
 
-2. Download the whisper model:
+3. Download the whisper model (optional if using the default model path):
 
 ```bash
 mkdir -p ./models
-curl -L -o models/ggml-small.en.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin
+curl -L -o models/ggml-base.en.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
 ```
 
-3. Set the environment variables in `.env` (optional if using default system paths):
-
-```bash
-export FFMPEG_PATH='/opt/homebrew/bin/ffmpeg'
-export WHISPER_CLI_PATH='/opt/homebrew/bin/whisper-cli'
-export WHISPER_MODEL_PATH='./models/ggml-small.en.bin'
-```
-
-3. Deploy slash commands:
+4. Deploy slash commands:
 
 ```bash
 npm run deploy-commands
 ```
 
-4. Start the bot (dev mode):
+5. Start the bot (dev mode):
 
 ```bash
 npm run dev

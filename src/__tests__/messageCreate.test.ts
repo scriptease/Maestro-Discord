@@ -342,8 +342,8 @@ test('handleMessageCreate transcribes voice messages and enqueues transcription 
         size: 1,
         values: () => [{ url: 'https://cdn.discord.com/voice.ogg', name: 'voice.ogg' }],
       },
-      reply: async (msg: string) => {
-        replies.push(msg);
+      reply: async (msg: string | { content: string; allowedMentions?: unknown }) => {
+        replies.push(typeof msg === 'string' ? msg : msg.content);
         return undefined;
       },
       react: async (emoji: string) => {
@@ -379,8 +379,8 @@ test('handleMessageCreate reports transcription failures and does not enqueue', 
         size: 1,
         values: () => [{ url: 'https://cdn.discord.com/voice.ogg', name: 'voice.ogg' }],
       },
-      reply: async (msg: string) => {
-        replies.push(msg);
+      reply: async (msg: string | { content: string; allowedMentions?: unknown }) => {
+        replies.push(typeof msg === 'string' ? msg : msg.content);
         return undefined;
       },
       react: async (emoji: string) => {

@@ -1,4 +1,5 @@
 import { Message, TextChannel, ThreadAutoArchiveDuration } from 'discord.js';
+import { escapeMarkdown } from '@discordjs/formatters';
 import { channelDb, threadDb } from '../db';
 import { enqueue } from '../services/queue';
 import { isVoiceAttachment, transcribeVoiceAttachment } from '../services/transcription';
@@ -137,7 +138,7 @@ export function createMessageCreateHandler(deps: MessageCreateDeps) {
         transcriptions.push(
           voiceAttachments.length === 1
             ? transcription
-            : `**${attachment.name}**\n${transcription}`,
+            : `**${escapeMarkdown(attachment.name)}**\n${transcription}`,
         );
       }
 
@@ -145,7 +146,7 @@ export function createMessageCreateHandler(deps: MessageCreateDeps) {
       const replyResults = await Promise.allSettled(
         deps
           .splitMessage(`🎧 ${transcriptionText}`)
-          .map((part) => message.reply(part)),
+          .map((part) => message.reply({ content: part, allowedMentions: { parse: [] } })),
       );
       const failedReplies = replyResults.filter((result) => result.status === 'rejected');
       if (failedReplies.length > 0) {
@@ -173,9 +174,15 @@ export function createMessageCreateHandler(deps: MessageCreateDeps) {
 
       const log = deps.logger?.error ?? console.error;
       log('messageCreate: failed to transcribe voice message:', err);
-      await message.reply(
-        '❌ Failed to transcribe this voice message. Please confirm it is a valid .ogg voice message and that ffmpeg/whisper-cli are configured.',
-      );
+      try {
+        await message.reply({
+          content: '❌ Failed to transcribe this voice message. Please confirm it is a valid .ogg voice message and that ffmpeg/whisper-cli are configured.',
+          allowedMentions: { parse: [] },
+        });
+      } catch (replyErr) {
+        const logErr = deps.logger?.error ?? console.error;
+        logErr('messageCreate: failed to send transcription error reply:', replyErr);
+      }
     }
   };
 }
