@@ -4,6 +4,8 @@ import { enqueue } from '../services/queue';
 import { isVoiceAttachment, transcribeVoiceAttachment } from '../services/transcription';
 import { splitMessage } from '../utils/splitMessage';
 
+const TYPING_INDICATOR_INTERVAL_MS = 8000;
+
 type MessageCreateDeps = {
   channelDb: Pick<typeof channelDb, 'get'>;
   threadDb: Pick<typeof threadDb, 'get' | 'register'>;
@@ -127,7 +129,7 @@ export function createMessageCreateHandler(deps: MessageCreateDeps) {
     try {
       typingInterval = setInterval(() => {
         message.channel.sendTyping().catch(() => {});
-      }, 8000);
+      }, TYPING_INDICATOR_INTERVAL_MS);
       message.channel.sendTyping().catch(() => {});
 
       await message.reply('🎙️ Transcribing voice message...');
@@ -155,7 +157,9 @@ export function createMessageCreateHandler(deps: MessageCreateDeps) {
     } catch (err) {
       const log = deps.logger?.error ?? console.error;
       log('messageCreate: failed to transcribe voice message:', err);
-      await message.reply('❌ Failed to transcribe this voice message.');
+      await message.reply(
+        '❌ Failed to transcribe this voice message. Please try again and confirm the attachment is a supported audio file.',
+      );
     } finally {
       if (typingInterval) clearInterval(typingInterval);
     }

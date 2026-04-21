@@ -10,7 +10,12 @@ import { config } from '../config';
 const execAsync = promisify(exec);
 
 function quoteArg(value: string): string {
-  return `"${value.replace(/"/g, '\\"')}"`;
+  const escaped = value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\$/g, '\\$')
+    .replace(/`/g, '\\`');
+  return `"${escaped}"`;
 }
 
 async function runCommand(command: string): Promise<void> {
@@ -60,7 +65,9 @@ export async function transcribeVoiceAttachment(attachment: Attachment): Promise
 
     const transcription = (await readFile(outputTxtPath, 'utf8')).trim();
     if (!transcription) {
-      throw new Error('Whisper returned an empty transcription');
+      throw new Error(
+        'Whisper returned an empty transcription (the audio may be silent or speech was not detected).',
+      );
     }
     return transcription;
   } finally {
