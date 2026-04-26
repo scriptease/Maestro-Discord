@@ -114,7 +114,7 @@ export async function transcribeVoiceAttachment(attachment: Attachment): Promise
     return transcription;
   } finally {
     await rm(tempDir, { recursive: true, force: true }).catch((err) => {
-      logger.error(`Failed to clean up temp transcription files at "${tempDir}":`, err);
+      logger.error('transcription', `Failed to clean up temp transcription files at "${tempDir}": ${err.message || err}`);
     });
   }
 }
