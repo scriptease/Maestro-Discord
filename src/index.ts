@@ -1,4 +1,6 @@
 import { Client, GatewayIntentBits, Interaction } from 'discord.js';
+import Database from 'better-sqlite3';
+import path from 'path';
 import { config } from './config';
 import * as health from './commands/health';
 import * as agents from './commands/agents';
@@ -7,6 +9,8 @@ import './db'; // ensure DB is initialized on startup
 import { checkTranscriptionDependencies } from './services/transcription';
 import { handleMessageCreate } from './handlers/messageCreate';
 import { startServer } from './server';
+
+const db = new Database(path.join(__dirname, '../maestro-bot.db'));
 
 const commands = new Map([
   [health.data.name, health],
@@ -80,14 +84,26 @@ client.on('messageCreate', handleMessageCreate);
 
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
+  try {
+    db.exec('PRAGMA wal_checkpoint(RESTART);');
+  } catch (err) {
+    console.error('Failed to checkpoint database:', err);
+  }
   server?.close();
   client.destroy();
+  db.close();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
+  try {
+    db.exec('PRAGMA wal_checkpoint(RESTART);');
+  } catch (err) {
+    console.error('Failed to checkpoint database:', err);
+  }
   server?.close();
   client.destroy();
+  db.close();
   process.exit(0);
 });
 
