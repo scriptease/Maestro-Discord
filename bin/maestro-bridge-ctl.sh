@@ -1,16 +1,43 @@
 #!/usr/bin/env bash
-# Service wrapper for the Maestro Discord bot.
+# Service wrapper for the Maestro Bridge.
 # Subcommands: start | stop | restart | status | logs | deploy | update | uninstall | version
+#
+# Backwards-compat: legacy MAESTRO_DISCORD_* env vars are accepted as fallback.
+# A legacy install at ~/.local/share/maestro-discord is auto-detected when
+# the new install dir doesn't exist.
 
 set -euo pipefail
 
-INSTALL_DIR="${MAESTRO_DISCORD_HOME:-$HOME/.local/share/maestro-discord}"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/maestro-discord"
-BIN_DIR="${MAESTRO_DISCORD_BIN_DIR:-$HOME/.local/bin}"
-REPO="${MAESTRO_DISCORD_REPO:-RunMaestro/Maestro-Discord}"
-SERVICE_NAME="maestro-discord"
-LAUNCHD_LABEL="sh.maestro.discord"
+# Resolve install paths with MAESTRO_DISCORD_* fallback for back-compat.
+INSTALL_DIR="${MAESTRO_BRIDGE_HOME:-${MAESTRO_DISCORD_HOME:-}}"
+if [ -z "$INSTALL_DIR" ]; then
+  if [ -d "$HOME/.local/share/maestro-bridge" ]; then
+    INSTALL_DIR="$HOME/.local/share/maestro-bridge"
+  elif [ -d "$HOME/.local/share/maestro-discord" ]; then
+    INSTALL_DIR="$HOME/.local/share/maestro-discord"
+  else
+    INSTALL_DIR="$HOME/.local/share/maestro-bridge"
+  fi
+fi
+
+XDG_CONFIG_PARENT="${XDG_CONFIG_HOME:-$HOME/.config}"
+if [ -d "$XDG_CONFIG_PARENT/maestro-bridge" ]; then
+  CONFIG_DIR="$XDG_CONFIG_PARENT/maestro-bridge"
+elif [ -d "$XDG_CONFIG_PARENT/maestro-discord" ]; then
+  CONFIG_DIR="$XDG_CONFIG_PARENT/maestro-discord"
+else
+  CONFIG_DIR="$XDG_CONFIG_PARENT/maestro-bridge"
+fi
+
+BIN_DIR="${MAESTRO_BRIDGE_BIN_DIR:-${MAESTRO_DISCORD_BIN_DIR:-$HOME/.local/bin}}"
+REPO="${MAESTRO_BRIDGE_REPO:-${MAESTRO_DISCORD_REPO:-RunMaestro/Maestro-Bridge}}"
+SERVICE_NAME="maestro-bridge"
+LAUNCHD_LABEL="sh.maestro.bridge"
 LAUNCHD_PLIST="$HOME/Library/LaunchAgents/${LAUNCHD_LABEL}.plist"
+# Legacy names — used by uninstall to clean up after a v0.0.x install.
+LEGACY_SERVICE_NAME="maestro-discord"
+LEGACY_LAUNCHD_LABEL="sh.maestro.discord"
+LEGACY_LAUNCHD_PLIST="$HOME/Library/LaunchAgents/${LEGACY_LAUNCHD_LABEL}.plist"
 
 die() { printf '✗ %s\n' "$*" >&2; exit 1; }
 info() { printf '==> %s\n' "$*"; }
@@ -25,25 +52,27 @@ detect_os() {
 
 usage() {
   cat <<'EOF'
-maestro-discord-ctl — control the Maestro Discord bot service.
+maestro-bridge-ctl — control the Maestro Bridge service.
+(Alias: maestro-discord-ctl, preserved for back-compat.)
 
 Usage:
-  maestro-discord-ctl <command>
+  maestro-bridge-ctl <command>
 
 Commands:
-  start       Start the bot service
-  stop        Stop the bot service
-  restart     Restart the bot service
+  start       Start the bridge service
+  stop        Stop the bridge service
+  restart     Restart the bridge service
   status      Show service status
   logs        Tail service logs (Ctrl+C to stop)
   deploy      Deploy slash commands to Discord
   update      Reinstall the latest release (preserves config)
-  uninstall   Remove the bot, service files, and CLI symlink
+  uninstall   Remove the bridge, service files, and CLI symlink
   version     Print installed version
 
 Environment:
-  MAESTRO_DISCORD_HOME    Override install dir  (default: ~/.local/share/maestro-discord)
-  XDG_CONFIG_HOME         Config dir parent     (default: ~/.config)
+  MAESTRO_BRIDGE_HOME    Override install dir  (default: ~/.local/share/maestro-bridge)
+  XDG_CONFIG_HOME        Config dir parent     (default: ~/.config)
+  MAESTRO_DISCORD_HOME   Accepted as fallback for back-compat with v0.0.x
 EOF
 }
 
@@ -98,7 +127,7 @@ cmd_logs() {
   case "$(detect_os)" in
     linux) journalctl --user -u "$SERVICE_NAME" -f --no-pager ;;
     macos)
-      local log_file="$INSTALL_DIR/logs/maestro-discord.log"
+      local log_file="$INSTALL_DIR/logs/maestro-bridge.log"
       mkdir -p "$INSTALL_DIR/logs"
       [ -f "$log_file" ] || touch "$log_file"
       tail -f "$log_file"
@@ -110,7 +139,7 @@ cmd_logs() {
 cmd_deploy() {
   require_install
   [ -f "$INSTALL_DIR/.env" ] || die "Config missing: $INSTALL_DIR/.env"
-  (cd "$INSTALL_DIR" && node dist/deploy-commands.js)
+  (cd "$INSTALL_DIR" && node dist/providers/discord/deploy.js)
 }
 
 cmd_update() {
@@ -118,18 +147,18 @@ cmd_update() {
   local tag config_parent
   tag="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | sed -nE 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1)"
   [ -n "$tag" ] || die "Could not resolve latest release tag"
-  config_parent="${CONFIG_DIR%/maestro-discord}"
+  config_parent="$(dirname "$CONFIG_DIR")"
   curl -fsSL "https://raw.githubusercontent.com/${REPO}/${tag}/install.sh" \
     | env \
-        MAESTRO_DISCORD_HOME="$INSTALL_DIR" \
-        MAESTRO_DISCORD_BIN_DIR="$BIN_DIR" \
-        MAESTRO_DISCORD_REPO="$REPO" \
+        MAESTRO_BRIDGE_HOME="$INSTALL_DIR" \
+        MAESTRO_BRIDGE_BIN_DIR="$BIN_DIR" \
+        MAESTRO_BRIDGE_REPO="$REPO" \
         XDG_CONFIG_HOME="$config_parent" \
         bash
 }
 
 cmd_uninstall() {
-  read -r -p "Remove $INSTALL_DIR, service files, and CLI symlink? [y/N] " ans
+  read -r -p "Remove $INSTALL_DIR, service files, and CLI symlinks? [y/N] " ans
   case "${ans:-n}" in
     y|Y|yes|YES) ;;
     *) info "Aborted"; exit 0 ;;
@@ -139,12 +168,23 @@ cmd_uninstall() {
     linux)
       systemctl --user disable --now "$SERVICE_NAME" 2>/dev/null || true
       rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/${SERVICE_NAME}.service"
+      # Clean up legacy unit if present.
+      systemctl --user disable --now "$LEGACY_SERVICE_NAME" 2>/dev/null || true
+      rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/${LEGACY_SERVICE_NAME}.service"
       systemctl --user daemon-reload || true
       systemctl --user reset-failed "$SERVICE_NAME" 2>/dev/null || true
+      systemctl --user reset-failed "$LEGACY_SERVICE_NAME" 2>/dev/null || true
       ;;
-    macos) rm -f "$LAUNCHD_PLIST" ;;
+    macos)
+      rm -f "$LAUNCHD_PLIST"
+      [ -f "$LEGACY_LAUNCHD_PLIST" ] && {
+        launchctl unload -w "$LEGACY_LAUNCHD_PLIST" 2>/dev/null || true
+        rm -f "$LEGACY_LAUNCHD_PLIST"
+      }
+      ;;
   esac
   rm -rf "$INSTALL_DIR"
+  rm -f "$BIN_DIR/maestro-bridge-ctl"
   rm -f "$BIN_DIR/maestro-discord-ctl"
   info "Uninstalled. Config preserved at $CONFIG_DIR (delete manually if desired)."
 }
