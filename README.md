@@ -54,11 +54,7 @@ if (-not ($userPath -split ';' -contains $binDir)) {
 Or use `npm link`:
 
 ```bash
-maestro-relay-ctl start     # boot the bot
-maestro-relay-ctl logs      # tail logs
-maestro-relay-ctl status    # service status
-maestro-relay-ctl update    # upgrade to latest release (preserves config)
-maestro-relay-ctl uninstall # remove install + service files
+npm link
 ```
 
 The legacy `maestro-discord` binary is registered as an alias to the same JS, so existing scripts keep working.
