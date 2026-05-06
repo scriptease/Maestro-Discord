@@ -21,43 +21,23 @@
 - A Discord application + bot token (if running the Discord provider)
 - [Maestro CLI](https://docs.runmaestro.ai/cli) on your `PATH`
 
-### Install the `maestro-relay` CLI
-
-The `maestro-relay` CLI lets your Maestro agents reach out to chat — for example, to ping you when a long-running task finishes. See [docs/api.md](docs/api.md) for usage.
-
-After building (`npm run build`), create a shell wrapper.
-
-macOS / Linux:
+## Install (production one-liner)
 
 ```bash
-printf '#!/bin/bash\nnode "%s/dist/cli/maestro-relay.js" "$@"\n' "$(pwd)" | sudo tee /usr/local/bin/maestro-relay && sudo chmod +x /usr/local/bin/maestro-relay
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/RunMaestro/Maestro-Relay/main/install.sh)"
 ```
 
-Windows (PowerShell) — writes the wrapper to `%USERPROFILE%\bin` and adds it to your user `PATH`:
-
-```powershell
-$repoPath = (Get-Location).Path
-$binDir = "$env:USERPROFILE\bin"
-New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-@"
-@echo off
-node "$repoPath\dist\cli\maestro-relay.js" %*
-"@ | Out-File -FilePath "$binDir\maestro-relay.cmd" -Encoding ASCII
-
-# Add $binDir to user PATH if it isn't already (restart your shell afterwards)
-$userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
-if (-not ($userPath -split ';' -contains $binDir)) {
-    [Environment]::SetEnvironmentVariable('PATH', "$binDir;$userPath", 'User')
-}
-```
-
-Or use `npm link`:
+After install:
 
 ```bash
-npm link
+maestro-relay-ctl start     # boot the bot
+maestro-relay-ctl logs      # tail logs
+maestro-relay-ctl status    # service status
+maestro-relay-ctl update    # upgrade to latest release (preserves config)
+maestro-relay-ctl uninstall # remove install + service files
 ```
 
-The legacy `maestro-discord` binary is registered as an alias to the same JS, so existing scripts keep working.
+The legacy aliases `maestro-bridge-ctl` and `maestro-discord-ctl` still work for back-compat.
 
 ## Quick start
 
@@ -119,37 +99,7 @@ npm run deploy-commands
 npm run dev
 ```
 
-### Install maestro-relay CLI (dev)
-
-The `maestro-relay` CLI lets your Maestro agents reach out to your chat provider — for example, to ping you when a long-running task finishes. See [docs/api.md](docs/api.md) for usage.
-
-After building the project (`npm run build`), create a shell wrapper.
-
-macOS / Linux:
-
-```bash
-printf '#!/bin/bash\nnode "%s/dist/cli/maestro-relay.js" "$@"\n' "$(pwd)" | sudo tee /usr/local/bin/maestro-relay && sudo chmod +x /usr/local/bin/maestro-relay
-```
-
-Windows (PowerShell) — writes the wrapper to `%USERPROFILE%\bin` and adds it to your user `PATH`:
-
-```powershell
-$repoPath = (Get-Location).Path
-$binDir = "$env:USERPROFILE\bin"
-New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-@"
-@echo off
-node "$repoPath\dist\cli\maestro-relay.js" %*
-"@ | Out-File -FilePath "$binDir\maestro-relay.cmd" -Encoding ASCII
-
-# Add $binDir to user PATH if it isn't already (restart your shell afterwards)
-$userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
-if (-not ($userPath -split ';' -contains $binDir)) {
-    [Environment]::SetEnvironmentVariable('PATH', "$binDir;$userPath", 'User')
-}
-```
-
-Or use `npm link`:
+Optional for source-based local CLI usage:
 
 ```bash
 npm link
