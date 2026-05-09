@@ -112,8 +112,11 @@ export function createQueue(deps: QueueDeps) {
     if (provider.react) {
       try {
         reaction = await provider.react(messageTarget, '⏳');
-      } catch {
-        // best-effort indicator; ignore failures
+      } catch (err) {
+        void deps.logger.error(
+          'queue:react',
+          `provider=${message.provider} channel=${message.channelId} error=${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 

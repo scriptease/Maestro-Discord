@@ -1,4 +1,11 @@
 import { App, ExpressReceiver, SocketModeReceiver } from '@slack/bolt';
+
+const UNICODE_TO_SLACK: Record<string, string> = {
+  '⏳': 'hourglass_flowing_sand',
+  '🎧': 'headphones',
+  '✅': 'white_check_mark',
+  '❌': 'x',
+};
 import { WebClient } from '@slack/web-api';
 import type {
   AgentChannelInfo,
@@ -208,11 +215,12 @@ export class SlackProvider implements BridgeProvider {
       timestamp = target.messageId;
     }
 
-    await this.client.reactions.add({ channel, timestamp, name: emoji });
+    const name = UNICODE_TO_SLACK[emoji] ?? emoji;
+    await this.client.reactions.add({ channel, timestamp, name });
 
     return {
       remove: async () => {
-        await this.client!.reactions.remove({ channel, timestamp, name: emoji });
+        await this.client!.reactions.remove({ channel, timestamp, name });
       },
     };
   }
